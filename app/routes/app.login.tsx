@@ -109,22 +109,16 @@ export default function AppLogin() {
                   }}
                 >
                   <span style={{ marginRight: 8, verticalAlign: "middle" }}>
-                    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <g>
-                        <path
-                          fill="#96BF48"
-                          d="M10 0C4.477 0 0 4.477 0 10s4.477 10 10 10 10-4.477 10-10S15.523 0 10 0z"
-                        />
-                        <path
-                          fill="#fff"
-                          d="M13.5 7.5l-1 6.5-2.5 1-2.5-1-1-6.5h7z"
-                        />
-                        <path
-                          fill="#5E8E3E"
-                          d="M10 5.5c.828 0 1.5.672 1.5 1.5h-3c0-.828.672-1.5 1.5-1.5z"
-                        />
-                      </g>
-                    </svg>
+                    <img
+                      src="/shopifybag.svg"
+                      alt="Shopify"
+                      style={{
+                        width: 20,
+                        height: 20,
+                        display: "inline-block",
+                        verticalAlign: "middle",
+                      }}
+                    />
                   </span>
                   <Text variant="bodyMd" as="span" fontWeight="semibold">
                     {store.name || store.shop}
