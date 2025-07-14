@@ -23,7 +23,7 @@ api_version = "2025-04"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "write_products"
+scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = ["https://ilf-product-export-embeded.onrender.com/auth/callback", "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback", "https://ilf-product-export-embeded.onrender.com/api/auth/callback"]
