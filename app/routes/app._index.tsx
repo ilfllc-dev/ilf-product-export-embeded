@@ -25,6 +25,7 @@ import {
 import { ProductResourceList } from "../components/ProductResourceList";
 import { ProductExportModal } from "../components/ProductExportModal";
 import { TargetStoresList } from "../components/TargetStoresList";
+import { AppUninstalledBanner } from "../components/AppUninstalledBanner";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Debug environment variables
@@ -41,6 +42,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Authenticate with Shopify to get current store's data
   let admin = null;
   let currentStoreName = "Unknown Store";
+  let authError = null;
+  let shopDomain = null;
 
   console.log("=== AUTHENTICATION DEBUG ===");
   console.log("Request URL:", request.url);
@@ -48,6 +51,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     "Request headers:",
     Object.fromEntries(request.headers.entries()),
   );
+
+  // Extract shop domain from URL parameters
+  const requestUrl = new URL(request.url);
+  shopDomain = requestUrl.searchParams.get("shop");
 
   try {
     console.log("Attempting to authenticate with Shopify...");
@@ -57,15 +64,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     console.log("Admin object:", admin);
     currentStoreName = await getCurrentStoreName(admin);
     console.log("Store name:", currentStoreName);
-  } catch (error) {
+  } catch (error: any) {
     console.log("❌ Authentication FAILED");
     console.log("Error details:", error);
-    console.log("Error message:", (error as Error).message);
-    console.log("Error stack:", (error as Error).stack);
+    console.log("Error message:", error.message);
+    console.log("Error stack:", error.stack);
+
+    // Check if it's a 410 (Gone) error - app uninstalled
+    if (error.status === 410 || error.message?.includes("410")) {
+      authError =
+        "App has been uninstalled from this store. Please reinstall the app to continue.";
+    } else if (error.status === 302 || error.message?.includes("302")) {
+      authError = "Authentication required. Please log in to continue.";
+    } else {
+      authError = "Authentication failed. Please try again or contact support.";
+    }
+
     // Continue without admin access - this prevents redirect loops
   }
 
-  const url = new URL(request.url);
+  const url = requestUrl;
   const search = url.searchParams.get("search") || "";
   const cursor = url.searchParams.get("cursor") || "";
   const limit = parseInt(url.searchParams.get("limit") || "20");
@@ -131,7 +149,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       },
       edges: [],
     };
-    error = "Authentication required to view products";
+    error = authError || "Authentication required to view products";
   }
 
   console.log("=== END AUTHENTICATION DEBUG ===");
@@ -143,6 +161,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     stores,
     error,
     currentStoreName,
+    shopDomain,
     storeOnboardUrl:
       process.env.SHOPIFY_STORE_ONBOARD_URL || "http://localhost:5174",
   });
@@ -155,6 +174,7 @@ export default function ProductList() {
     stores,
     error,
     currentStoreName,
+    shopDomain,
     storeOnboardUrl,
   } = useLoaderData<typeof loader>();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -258,8 +278,13 @@ export default function ProductList() {
     <Page>
       <TitleBar title="Products" />
 
-      {/* Error State */}
-      {error && (
+      {/* App Uninstalled Banner */}
+      {error && error.includes("uninstalled") && (
+        <AppUninstalledBanner shop={shopDomain || undefined} />
+      )}
+
+      {/* Other Error State */}
+      {error && !error.includes("uninstalled") && (
         <Box padding="400" background="bg-surface-critical" borderRadius="200">
           <Text as="span" variant="bodyMd" tone="critical">
             {error}

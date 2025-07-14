@@ -14,7 +14,22 @@ console.log(
 );
 console.log("App URL:", process.env.SHOPIFY_APP_URL);
 console.log("Scopes:", ["read_products", "write_products"]);
+console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("=== END SHOPIFY SERVER CONFIG DEBUG ===");
+
+// Choose session storage based on environment
+let sessionStorage;
+if (process.env.NODE_ENV === "production") {
+  // In production, use memory storage but with better error handling
+  // TODO: Consider implementing a persistent session storage (Redis, Database)
+  console.log(
+    "Using MemorySessionStorage for production (consider upgrading to persistent storage)",
+  );
+  sessionStorage = new MemorySessionStorage();
+} else {
+  console.log("Using MemorySessionStorage for development");
+  sessionStorage = new MemorySessionStorage();
+}
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -23,13 +38,13 @@ const shopify = shopifyApp({
   scopes: ["read_products", "write_products"],
   appUrl: process.env.SHOPIFY_APP_URL || "",
   distribution: AppDistribution.AppStore,
-  sessionStorage: new MemorySessionStorage(),
+  sessionStorage,
   cookieOptions: {
     sameSite: "lax",
-    secure: true,
+    secure: process.env.NODE_ENV === "production",
   },
   future: {
-    unstable_newEmbeddedAuthStrategy: false,
+    unstable_newEmbeddedAuthStrategy: true, // Enable OAuth token exchange
     removeRest: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN

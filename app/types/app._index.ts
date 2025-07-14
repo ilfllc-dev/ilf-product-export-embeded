@@ -50,5 +50,6 @@ export interface LoaderData {
   }>;
   error?: string;
   currentStoreName: string;
+  shopDomain?: string | null;
   storeOnboardUrl: string;
 }
