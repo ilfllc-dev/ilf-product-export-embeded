@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import type { LoaderData } from "../types/app._index";
-import { json } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
 import {
   Page,
@@ -55,6 +55,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Extract shop domain from URL parameters
   const requestUrl = new URL(request.url);
   shopDomain = requestUrl.searchParams.get("shop");
+
+  // Check if this is an OAuth callback (has code parameter)
+  const isOAuthCallback = requestUrl.searchParams.has("code");
+
+  if (isOAuthCallback) {
+    console.log("🔄 OAuth callback detected, redirecting to auth callback");
+    return redirect(`/auth/callback?${requestUrl.searchParams.toString()}`);
+  }
 
   try {
     console.log("Attempting to authenticate with Shopify...");
