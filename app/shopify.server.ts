@@ -40,8 +40,9 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   sessionStorage,
   cookieOptions: {
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    sameSite: "none", // Required for embedded apps
+    secure: true, // Required for embedded apps
+    httpOnly: true,
   },
   future: {
     unstable_newEmbeddedAuthStrategy: true, // Enable OAuth token exchange
