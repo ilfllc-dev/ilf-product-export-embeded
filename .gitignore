@@ -21,3 +21,7 @@ database.sqlite
 # Ignore shopify files created during app dev
 .shopify/*
 .shopify.lock
+.vercel
+vercel*
+shopify.app.production.toml
+shopify.app.toml
