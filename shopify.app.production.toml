@@ -1,0 +1,31 @@
+client_id = "d99f8bbe7d0eb2cf598b442bd7b83b38"
+
+name = "product-export"
+handle = "product-export-1"
+application_url = "https://textile-chambers-others-traveler.trycloudflare.com"
+embedded = true
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true
+
+[webhooks]
+api_version = "2025-04"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
+[access_scopes]
+scopes = "write_products"
+
+[auth]
+redirect_urls = ["https://textile-chambers-others-traveler.trycloudflare.com/auth/callback", "https://textile-chambers-others-traveler.trycloudflare.com/auth/shopify/callback", "https://textile-chambers-others-traveler.trycloudflare.com/api/auth/callback"]
+[pos]
+embedded = false
+
+
