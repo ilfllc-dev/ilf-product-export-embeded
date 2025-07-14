@@ -5,6 +5,7 @@ import {
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
+import { RedisSessionStorage } from "@shopify/shopify-app-session-storage-redis";
 
 console.log("=== SHOPIFY SERVER CONFIG DEBUG ===");
 console.log("API Key:", process.env.SHOPIFY_API_KEY);
@@ -19,13 +20,22 @@ console.log("=== END SHOPIFY SERVER CONFIG DEBUG ===");
 
 // Choose session storage based on environment
 let sessionStorage;
+
 if (process.env.NODE_ENV === "production") {
-  // In production, use memory storage but with better error handling
-  // TODO: Consider implementing a persistent session storage (Redis, Database)
-  console.log(
-    "Using MemorySessionStorage for production (consider upgrading to persistent storage)",
-  );
-  sessionStorage = new MemorySessionStorage();
+  // Use Redis for production - persistent across restarts and instances
+  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  console.log("Using RedisSessionStorage for production:", redisUrl);
+
+  try {
+    sessionStorage = new RedisSessionStorage(redisUrl);
+    console.log("✅ Redis session storage initialized successfully");
+  } catch (error) {
+    console.log(
+      "❌ Failed to initialize Redis, falling back to MemorySessionStorage",
+    );
+    console.log("Error:", error);
+    sessionStorage = new MemorySessionStorage();
+  }
 } else {
   console.log("Using MemorySessionStorage for development");
   sessionStorage = new MemorySessionStorage();
