@@ -13,16 +13,40 @@ export const loader = async ({ request }: any) => {
   const code = url.searchParams.get("code");
   const shop = url.searchParams.get("shop");
   const state = url.searchParams.get("state");
+  const idToken = url.searchParams.get("id_token");
 
-  console.log("OAuth parameters:", { code: !!code, shop, state });
+  console.log("OAuth parameters:", {
+    code: !!code,
+    shop,
+    state,
+    hasIdToken: !!idToken,
+  });
 
+  // Handle embedded app authentication (id_token)
+  if (idToken && shop) {
+    console.log("🔄 Processing embedded app authentication with id_token");
+    try {
+      const authResult = await authenticate.admin(request);
+      console.log("✅ Embedded app authentication successful");
+      console.log("Session shop:", authResult.session?.shop);
+
+      // Redirect to the app with the session
+      return redirect("/app");
+    } catch (error: any) {
+      console.log("❌ Embedded app authentication failed");
+      console.log("Error:", error);
+      return redirect(`/auth/login?shop=${shop}&error=embedded_auth_failed`);
+    }
+  }
+
+  // Handle traditional OAuth flow (code)
   if (!code || !shop) {
     console.log("❌ Missing code or shop parameter");
     return redirect("/?error=missing_oauth_params");
   }
 
   try {
-    console.log("Processing OAuth callback...");
+    console.log("🔄 Processing traditional OAuth callback...");
     const authResult = await authenticate.admin(request);
     console.log("✅ OAuth callback successful");
     console.log("Session shop:", authResult.session?.shop);

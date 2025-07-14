@@ -58,6 +58,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   // Check if this is an OAuth callback (has code parameter)
   const isOAuthCallback = requestUrl.searchParams.has("code");
+  const hasIdToken = requestUrl.searchParams.has("id_token");
 
   if (isOAuthCallback) {
     console.log("🔄 OAuth callback detected, redirecting to auth callback");
@@ -66,10 +67,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   try {
     console.log("Attempting to authenticate with Shopify...");
+    console.log("Has id_token:", hasIdToken);
+    console.log("Has code:", isOAuthCallback);
+
+    // For embedded apps, use the authenticate.admin method which handles id_token
     const authResult = await authenticate.admin(request);
     admin = authResult.admin;
     console.log("✅ Authentication SUCCESSFUL");
     console.log("Admin object:", admin);
+    console.log("Session shop:", authResult.session?.shop);
     currentStoreName = await getCurrentStoreName(admin);
     console.log("Store name:", currentStoreName);
   } catch (error: any) {
@@ -83,7 +89,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       authError =
         "App has been uninstalled from this store. Please reinstall the app to continue.";
     } else if (error.status === 302 || error.message?.includes("302")) {
-      authError = "Authentication required. Please log in to continue.";
+      // For embedded apps, if we get a 302, it means we need to redirect to login
+      console.log("🔄 Redirecting to login for embedded app authentication");
+      const loginUrl = `/auth/login?shop=${shopDomain}`;
+      console.log("Login URL:", loginUrl);
+      return redirect(loginUrl);
     } else {
       authError = "Authentication failed. Please try again or contact support.";
     }
