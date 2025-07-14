@@ -1,5 +1,4 @@
 import { redirect } from "@remix-run/node";
-import { authenticate } from "../shopify.server";
 
 export const loader = async ({ request }: any) => {
   console.log("=== LOGIN ROUTE DEBUG ===");
@@ -16,8 +15,20 @@ export const loader = async ({ request }: any) => {
   console.log("🔄 Initiating OAuth flow for shop:", shop);
 
   try {
-    // This will redirect to Shopify's OAuth authorization page
-    return await authenticate.admin(request);
+    // Create the OAuth authorization URL
+    const apiKey = process.env.SHOPIFY_API_KEY;
+    const appUrl = process.env.SHOPIFY_APP_URL;
+    const scopes = "read_products,write_products";
+
+    if (!apiKey || !appUrl) {
+      console.log("❌ Missing API key or app URL");
+      return redirect("/?error=config_missing");
+    }
+
+    const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${scopes}&redirect_uri=${appUrl}/auth/callback&state=${shop}`;
+
+    console.log("🔄 Redirecting to Shopify OAuth:", authUrl);
+    return redirect(authUrl);
   } catch (error: any) {
     console.log("❌ OAuth initiation failed:", error);
     return redirect(`/?error=oauth_init_failed&shop=${shop}`);

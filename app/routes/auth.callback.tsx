@@ -9,6 +9,18 @@ export const loader = async ({ request }: any) => {
     Object.fromEntries(request.headers.entries()),
   );
 
+  const url = new URL(request.url);
+  const code = url.searchParams.get("code");
+  const shop = url.searchParams.get("shop");
+  const state = url.searchParams.get("state");
+
+  console.log("OAuth parameters:", { code: !!code, shop, state });
+
+  if (!code || !shop) {
+    console.log("❌ Missing code or shop parameter");
+    return redirect("/?error=missing_oauth_params");
+  }
+
   try {
     console.log("Processing OAuth callback...");
     const authResult = await authenticate.admin(request);
@@ -25,6 +37,6 @@ export const loader = async ({ request }: any) => {
     console.log("Error status:", error.status);
 
     // Redirect to login with error
-    return redirect("/auth/login?error=oauth_failed");
+    return redirect(`/auth/login?shop=${shop}&error=oauth_failed`);
   }
 };
