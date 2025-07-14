@@ -16,11 +16,11 @@ import {
   Box,
 } from "@shopify/polaris";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { authenticate } from "../shopify.server";
+// import { authenticate } from "../shopify.server";
 import {
-  getCurrentStoreName,
+  // getCurrentStoreName,
   fetchTargetStores,
-  fetchShopifyProducts,
+  // fetchShopifyProducts,
 } from "../services/shopify.server";
 import { ProductResourceList } from "../components/ProductResourceList";
 import { ProductExportModal } from "../components/ProductExportModal";
@@ -28,11 +28,11 @@ import { TargetStoresList } from "../components/TargetStoresList";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Authenticate with Shopify to get current store's data
-  const { admin } = await authenticate.admin(request);
+  // const { admin } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
-  const cursor = url.searchParams.get("cursor") || "";
+  // const cursor = url.searchParams.get("cursor") || "";
   const limit = parseInt(url.searchParams.get("limit") || "20");
 
   // Fetch target stores using service
@@ -40,17 +40,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   console.log("Loader - fetched stores:", stores);
 
   // Fetch products using service
-  const variables = {
-    first: limit,
-    after: cursor || null,
-    query: search
-      ? `title:*${search}* OR vendor:*${search}* OR product_type:*${search}*`
-      : null,
-  };
+  // const variables = {
+  //   first: limit,
+  //   after: cursor || null,
+  //   query: search
+  //     ? `title:*${search}* OR vendor:*${search}* OR product_type:*${search}*`
+  //     : null,
+  // };
   let products = null;
   let error = undefined;
   try {
-    products = await fetchShopifyProducts(admin, variables);
+    // Temporarily disable product fetching to test
+    // products = await fetchShopifyProducts(admin, variables);
+    products = {
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: "",
+        endCursor: "",
+      },
+      edges: [],
+    };
     if (!products) {
       error = "Failed to fetch products";
       products = {
@@ -77,7 +87,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Get current store name using service
-  const currentStoreName = await getCurrentStoreName(admin);
+  // const currentStoreName = await getCurrentStoreName(admin);
+  const currentStoreName = "Test Store";
 
   return json<LoaderData>({
     products,
