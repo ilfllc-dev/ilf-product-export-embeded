@@ -3,7 +3,7 @@
 client_id = "9c0c19523f0f66c6187e903144af5802"
 name = "product-export"
 handle = "product-export-1"
-application_url = "https://textile-chambers-others-traveler.trycloudflare.com"
+application_url = "https://ilf-product-export-embeded.onrender.com"
 embedded = true
 
 [build]
@@ -26,7 +26,7 @@ api_version = "2025-04"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://textile-chambers-others-traveler.trycloudflare.com/auth/callback", "https://textile-chambers-others-traveler.trycloudflare.com/auth/shopify/callback", "https://textile-chambers-others-traveler.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://ilf-product-export-embeded.onrender.com/auth/callback", "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback", "https://ilf-product-export-embeded.onrender.com/api/auth/callback"]
 [pos]
 embedded = false
 
