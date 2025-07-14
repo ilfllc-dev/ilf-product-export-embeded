@@ -25,11 +25,11 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   sessionStorage: new MemorySessionStorage(),
   cookieOptions: {
-    sameSite: "none",
+    sameSite: "lax",
     secure: true,
   },
   future: {
-    unstable_newEmbeddedAuthStrategy: true,
+    unstable_newEmbeddedAuthStrategy: false,
     removeRest: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
