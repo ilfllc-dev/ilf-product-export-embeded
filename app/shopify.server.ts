@@ -6,6 +6,16 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
 
+console.log("=== SHOPIFY SERVER CONFIG DEBUG ===");
+console.log("API Key:", process.env.SHOPIFY_API_KEY);
+console.log(
+  "API Secret:",
+  process.env.SHOPIFY_API_SECRET ? "SET (hidden)" : "NOT SET",
+);
+console.log("App URL:", process.env.SHOPIFY_APP_URL);
+console.log("Scopes:", ["read_products", "write_products"]);
+console.log("=== END SHOPIFY SERVER CONFIG DEBUG ===");
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",

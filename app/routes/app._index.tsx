@@ -27,6 +27,17 @@ import { ProductExportModal } from "../components/ProductExportModal";
 import { TargetStoresList } from "../components/TargetStoresList";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  // Debug environment variables
+  console.log("=== ENVIRONMENT VARIABLES DEBUG ===");
+  console.log("SHOPIFY_API_KEY:", process.env.SHOPIFY_API_KEY);
+  console.log(
+    "SHOPIFY_API_SECRET:",
+    process.env.SHOPIFY_API_SECRET ? "SET (hidden)" : "NOT SET",
+  );
+  console.log("SHOPIFY_APP_URL:", process.env.SHOPIFY_APP_URL);
+  console.log("NODE_ENV:", process.env.NODE_ENV);
+  console.log("=== END ENVIRONMENT VARIABLES DEBUG ===");
+
   // Authenticate with Shopify to get current store's data
   let admin = null;
   let currentStoreName = "Unknown Store";
