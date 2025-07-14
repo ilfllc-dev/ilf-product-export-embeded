@@ -3,7 +3,7 @@
 client_id = "9c0c19523f0f66c6187e903144af5802"
 name = "product-export"
 handle = "product-export-1"
-application_url = "https://burlington-pci-garcia-illustrated.trycloudflare.com"
+application_url = "https://textile-chambers-others-traveler.trycloudflare.com"
 embedded = true
 
 [build]
@@ -26,6 +26,12 @@ api_version = "2025-04"
 scopes = "write_products"
 
 [auth]
-redirect_urls = ["https://burlington-pci-garcia-illustrated.trycloudflare.com/auth/callback", "https://burlington-pci-garcia-illustrated.trycloudflare.com/auth/shopify/callback", "https://burlington-pci-garcia-illustrated.trycloudflare.com/api/auth/callback"]
+redirect_urls = ["https://textile-chambers-others-traveler.trycloudflare.com/auth/callback", "https://textile-chambers-others-traveler.trycloudflare.com/auth/shopify/callback", "https://textile-chambers-others-traveler.trycloudflare.com/api/auth/callback"]
 [pos]
 embedded = false
+
+[[extensions]]
+type = "ui_extension"
+handle = "export-product-action"
+name = "t:name"
+path = "extensions/export-product-action"
