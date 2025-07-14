@@ -16,30 +16,46 @@ console.log(
 console.log("App URL:", process.env.SHOPIFY_APP_URL);
 console.log("Scopes:", ["read_products", "write_products"]);
 console.log("NODE_ENV:", process.env.NODE_ENV);
+console.log("REDIS_URL:", process.env.REDIS_URL || "NOT SET");
 console.log("=== END SHOPIFY SERVER CONFIG DEBUG ===");
 
 // Choose session storage based on environment
 let sessionStorage;
 
+console.log("=== SESSION STORAGE SETUP ===");
+console.log("NODE_ENV value:", process.env.NODE_ENV);
+console.log("Is production?", process.env.NODE_ENV === "production");
+
 if (process.env.NODE_ENV === "production") {
   // Use Redis for production - persistent across restarts and instances
   const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-  console.log("Using RedisSessionStorage for production:", redisUrl);
+  console.log("🔍 Attempting to use Redis for production");
+  console.log("🔍 Redis URL:", redisUrl);
 
-  try {
-    sessionStorage = new RedisSessionStorage(redisUrl);
-    console.log("✅ Redis session storage initialized successfully");
-  } catch (error) {
-    console.log(
-      "❌ Failed to initialize Redis, falling back to MemorySessionStorage",
-    );
-    console.log("Error:", error);
+  if (process.env.REDIS_URL) {
+    try {
+      console.log("🔄 Creating RedisSessionStorage...");
+      sessionStorage = new RedisSessionStorage(redisUrl);
+      console.log("✅ Redis session storage initialized successfully");
+    } catch (error) {
+      console.log(
+        "❌ Failed to initialize Redis, falling back to MemorySessionStorage",
+      );
+      console.log("Error:", error);
+      sessionStorage = new MemorySessionStorage();
+      console.log("⚠️ Using MemorySessionStorage as fallback");
+    }
+  } else {
+    console.log("❌ REDIS_URL not set, using MemorySessionStorage");
     sessionStorage = new MemorySessionStorage();
+    console.log("⚠️ Using MemorySessionStorage (REDIS_URL missing)");
   }
 } else {
-  console.log("Using MemorySessionStorage for development");
+  console.log("🔄 Using MemorySessionStorage for development");
   sessionStorage = new MemorySessionStorage();
 }
+
+console.log("=== SESSION STORAGE SETUP COMPLETE ===");
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
