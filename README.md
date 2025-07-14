@@ -30,4 +30,4 @@ This Shopify app is currently in development. Deployment and development instruc
 
 ---
 
-_Last Updated: January 2025_
+
