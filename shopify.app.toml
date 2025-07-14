@@ -30,8 +30,4 @@ redirect_urls = ["https://textile-chambers-others-traveler.trycloudflare.com/aut
 [pos]
 embedded = false
 
-[[extensions]]
-type = "ui_extension"
-handle = "export-product-action"
-name = "t:name"
-path = "extensions/export-product-action"
+
