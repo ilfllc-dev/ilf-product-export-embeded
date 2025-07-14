@@ -31,15 +31,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let admin = null;
   let currentStoreName = "Unknown Store";
 
+  console.log("=== AUTHENTICATION DEBUG ===");
+  console.log("Request URL:", request.url);
+  console.log(
+    "Request headers:",
+    Object.fromEntries(request.headers.entries()),
+  );
+
   try {
+    console.log("Attempting to authenticate with Shopify...");
     const authResult = await authenticate.admin(request);
     admin = authResult.admin;
+    console.log("✅ Authentication SUCCESSFUL");
+    console.log("Admin object:", admin);
     currentStoreName = await getCurrentStoreName(admin);
+    console.log("Store name:", currentStoreName);
   } catch (error) {
-    console.log(
-      "Authentication failed, continuing without admin access:",
-      error,
-    );
+    console.log("❌ Authentication FAILED");
+    console.log("Error details:", error);
+    console.log("Error message:", (error as Error).message);
+    console.log("Error stack:", (error as Error).stack);
     // Continue without admin access - this prevents redirect loops
   }
 
@@ -65,7 +76,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   if (admin) {
     try {
+      console.log("Attempting to fetch products with admin access...");
       products = await fetchShopifyProducts(admin, variables);
+      console.log(
+        "✅ Products fetched successfully:",
+        products?.edges?.length || 0,
+        "products",
+      );
       if (!products) {
         error = "Failed to fetch products";
         products = {
@@ -79,6 +96,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         };
       }
     } catch (err) {
+      console.log("❌ Failed to fetch products:", err);
       error = "Failed to fetch products";
       products = {
         pageInfo: {
@@ -92,6 +110,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   } else {
     // No admin access, show empty product list
+    console.log("No admin access, showing empty product list");
     products = {
       pageInfo: {
         hasNextPage: false,
@@ -103,6 +122,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     };
     error = "Authentication required to view products";
   }
+
+  console.log("=== END AUTHENTICATION DEBUG ===");
 
   return json<LoaderData>({
     products,
