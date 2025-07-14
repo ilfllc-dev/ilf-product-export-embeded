@@ -33,4 +33,6 @@ COPY --from=builder /app/package.json ./package.json
 
 EXPOSE 3000
 
+# Set the working directory to /app and start the application
+WORKDIR /app
 CMD ["npm", "run", "start"]
