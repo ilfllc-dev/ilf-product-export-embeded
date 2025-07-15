@@ -12,19 +12,12 @@ import {
 } from "@shopify/polaris";
 
 export const loader = async ({ request }: any) => {
-  console.log("=== LOGIN ROUTE DEBUG ===");
-  console.log("Request URL:", request.url);
-
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   const error = url.searchParams.get("error");
 
-  console.log("Login parameters:", { shop, error });
-
   // If we have a shop parameter, try to initiate OAuth
   if (shop) {
-    console.log("🔄 Initiating OAuth flow for shop:", shop);
-
     try {
       // Create the OAuth authorization URL
       const apiKey = process.env.SHOPIFY_API_KEY;
@@ -32,17 +25,14 @@ export const loader = async ({ request }: any) => {
       const scopes = "read_products,write_products";
 
       if (!apiKey || !appUrl) {
-        console.log("❌ Missing API key or app URL");
         return json({ error: "Configuration missing", shop });
       }
 
       // For embedded apps, use the embedded OAuth flow
       const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${scopes}&redirect_uri=${appUrl}/auth/callback&state=${shop}`;
 
-      console.log("🔄 Redirecting to Shopify OAuth:", authUrl);
       return redirect(authUrl);
     } catch (error: any) {
-      console.log("❌ OAuth initiation failed:", error);
       return json({ error: "OAuth initiation failed", shop });
     }
   }
