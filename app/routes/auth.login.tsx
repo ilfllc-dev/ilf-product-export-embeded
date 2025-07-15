@@ -107,7 +107,7 @@ export default function LoginPage() {
               )}
 
               <InlineStack gap="200">
-                <Button variant="secondary" url="/install">
+                <Button variant="secondary" url="/app/install">
                   Custom Installation
                 </Button>
               </InlineStack>

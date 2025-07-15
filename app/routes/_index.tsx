@@ -10,5 +10,5 @@ export const loader = async ({ request }: any) => {
   }
 
   // If no shop parameter, redirect to the install page
-  return redirect("/install");
+  return redirect("/app/install");
 };
