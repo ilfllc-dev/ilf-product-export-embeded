@@ -9,6 +9,6 @@ export const loader = async ({ request }: any) => {
     return redirect(`/app?${url.searchParams.toString()}`);
   }
 
-  // If no shop parameter, redirect to a default page or show installation instructions
-  return redirect("/auth/login");
+  // If no shop parameter, redirect to the install page
+  return redirect("/install");
 };

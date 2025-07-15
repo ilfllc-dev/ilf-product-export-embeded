@@ -63,15 +63,16 @@ export default function LoginPage() {
               )}
 
               <Text as="p" variant="bodyMd">
-                To use this app, you need to install it through the Shopify
-                Partner Dashboard first.
+                To use this app, you need to install it on your Shopify store.
               </Text>
 
               <BlockStack gap="200">
                 <Text as="h2" variant="headingMd">
-                  Installation Steps:
+                  Installation Options:
                 </Text>
                 <Text as="p" variant="bodyMd">
+                  <strong>For stores in your Partner account:</strong>
+                  <br />
                   1. Go to your Shopify Partner Dashboard
                   <br />
                   2. Navigate to Apps → Your App
@@ -81,6 +82,11 @@ export default function LoginPage() {
                   4. Select the store you want to install the app on
                   <br />
                   5. Follow the OAuth flow to grant permissions
+                </Text>
+                <Text as="p" variant="bodyMd">
+                  <strong>For live stores (not in Partner account):</strong>
+                  <br />
+                  Use the custom installation flow below.
                 </Text>
               </BlockStack>
 
@@ -99,6 +105,12 @@ export default function LoginPage() {
                   </Button>
                 </InlineStack>
               )}
+
+              <InlineStack gap="200">
+                <Button variant="secondary" url="/install">
+                  Custom Installation
+                </Button>
+              </InlineStack>
             </BlockStack>
           </Card>
         </Layout.Section>
