@@ -15,7 +15,11 @@ interface ProductExportModalProps {
   toStore: string;
   setToStore: (id: string) => void;
   currentStoreName: string;
-  onExportProduct: (product: any, toStore: string) => Promise<any>;
+  onExportProduct: (
+    product: any,
+    toStore: string,
+    status: "draft" | "active",
+  ) => Promise<any>;
 }
 
 export const ProductExportModal: React.FC<ProductExportModalProps> = ({
@@ -29,6 +33,9 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   onExportProduct,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [productStatus, setProductStatus] = useState<"draft" | "active">(
+    "draft",
+  );
 
   if (!product) return null;
 
@@ -71,7 +78,11 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
           onAction: async () => {
             setIsExporting(true);
             try {
-              const result = await onExportProduct(product, toStore);
+              const result = await onExportProduct(
+                product,
+                toStore,
+                productStatus,
+              );
               setIsExporting(false);
               if (
                 typeof shopify !== "undefined" &&
@@ -247,6 +258,19 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
               options={storeOptions}
               value={toStore}
               onChange={setToStore}
+            />
+          </div>
+          <div style={{ width: "100%" }}>
+            <Select
+              label="Product status"
+              options={[
+                { label: "Draft", value: "draft" },
+                { label: "Active", value: "active" },
+              ]}
+              value={productStatus}
+              onChange={(value) =>
+                setProductStatus(value as "draft" | "active")
+              }
             />
           </div>
         </Modal.Section>

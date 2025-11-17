@@ -218,12 +218,16 @@ export default function ProductList() {
   const endCursor = products?.pageInfo?.endCursor;
 
   // Export product handler
-  const onExportProduct = async (product: any, toStore: string) => {
+  const onExportProduct = async (
+    product: any,
+    toStore: string,
+    status: "draft" | "active",
+  ) => {
     try {
       const res = await fetch("/app/api/export-product", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ product, toStore }),
+        body: JSON.stringify({ product, toStore, status }),
       });
 
       if (!res.ok) {

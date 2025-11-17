@@ -15,7 +15,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
   if (request.method !== "POST") {
     return json(
@@ -25,7 +25,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    const { products, toStore } = await request.json();
+    const { products, toStore, status } = await request.json();
 
     if (!Array.isArray(products) || products.length === 0) {
       return json(
@@ -40,7 +40,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // Export each product sequentially
     for (const product of products) {
       try {
-        const result = await exportProductToStore(product, toStore);
+        const result = await exportProductToStore(
+          product,
+          toStore,
+          admin,
+          status,
+        );
         results.push({
           productId: product.id,
           productTitle: product.title,

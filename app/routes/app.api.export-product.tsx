@@ -12,9 +12,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    const { product, toStore } = await request.json();
+    const { product, toStore, status } = await request.json();
     const { admin } = await authenticate.admin(request);
-    const result = await exportProductToStore(product, toStore, admin);
+    const result = await exportProductToStore(product, toStore, admin, status);
     return json(result);
   } catch (error: any) {
     console.error("Export error:", error);

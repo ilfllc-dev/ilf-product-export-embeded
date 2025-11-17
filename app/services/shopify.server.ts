@@ -230,6 +230,7 @@ export const exportProductToStore = async (
   product: any,
   toStoreId: string,
   admin: any,
+  status?: "draft" | "active",
 ) => {
   console.log("Starting export process for product:", product.title);
   console.log("Target store ID:", toStoreId);
@@ -335,6 +336,8 @@ export const exportProductToStore = async (
   }
 
   // 3. Map product data to Shopify REST API format
+  const normalizedStatus: "draft" | "active" =
+    status === "active" ? "active" : "draft";
   const productPayload: any = {
     product: {
       title: detailedProduct.title || "Untitled Product",
@@ -342,6 +345,7 @@ export const exportProductToStore = async (
       vendor: detailedProduct.vendor || "",
       product_type: detailedProduct.productType || "",
       tags: detailedProduct.tags || [],
+      status: normalizedStatus,
       images: [],
       variants: [],
     },
