@@ -1,7 +1,7 @@
-client_id = "d99f8bbe7d0eb2cf598b442bd7b83b38"
+client_id = "2b52d8282b9c451c11f0a54c557936be"
 
-name = "product-export-production"
-handle = "product-export-prod"
+name = "product-export-production-2"
+handle = "product-export-prod-2"
 application_url = "https://ilf-product-export-embeded.onrender.com"
 embedded = true
 
@@ -12,13 +12,13 @@ automatically_update_urls_on_dev = true
 [webhooks]
 api_version = "2025-04"
 
-  [[webhooks.subscriptions]]
-  topics = [ "app/uninstalled" ]
-  uri = "/webhooks/app/uninstalled"
+[[webhooks.subscriptions]]
+topics = ["app/uninstalled"]
+uri = "/webhooks/app/uninstalled"
 
-  [[webhooks.subscriptions]]
-  topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
+[[webhooks.subscriptions]]
+topics = ["app/scopes_update"]
+uri = "/webhooks/app/scopes_update"
 
 [access_scopes]
 scopes = "read_products,write_products"
@@ -27,9 +27,7 @@ scopes = "read_products,write_products"
 redirect_urls = [
   "https://ilf-product-export-embeded.onrender.com/auth/callback",
   "https://ilf-product-export-embeded.onrender.com/api/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback"
+  "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback",
 ]
 [pos]
 embedded = false
-
-
