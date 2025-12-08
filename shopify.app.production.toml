@@ -25,9 +25,9 @@ scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://ilf-product-export-embeded.onrender.com/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/api/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback",
+  "https://ilf-product-export-embeded-2.onrender.com/auth/callback",
+  "https://ilf-product-export-embeded-2.onrender.com/api/auth/callback",
+  "https://ilf-product-export-embeded-2.onrender.com/auth/shopify/callback",
 ]
 [pos]
 embedded = false
