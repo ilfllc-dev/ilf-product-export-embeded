@@ -396,7 +396,8 @@ export const exportProductToStore = async (
     productPayload.product.variants = detailedProduct.variants.edges.map(
       (v: any) => {
         const variant = v.node;
-        console.log("Processing variant:", variant.title || "Default Title");
+        const productTitle = detailedProduct.title || "Untitled Product";
+        console.log("Processing variant:", variant.title || productTitle);
 
         // Convert selectedOptions to option1, option2, option3 for REST API
         const option1 =
@@ -416,14 +417,21 @@ export const exportProductToStore = async (
               )?.value || null
             : null;
 
+        // Always use product title as fallback for variant title
+        const variantTitle = variant.title || productTitle;
+        // If all option values are null, use product title for option1 to avoid "(default name)"
+        const defaultOption1 = (option1 === null && option2 === null && option3 === null)
+          ? productTitle
+          : option1;
+
         return {
-          title: variant.title || "Default Title",
+          title: variantTitle,
           price: variant.price || "0.00",
           compare_at_price: variant.compareAtPrice || null,
           sku: variant.sku || "",
           barcode: variant.barcode || "",
           inventory_quantity: variant.inventoryQuantity || 0,
-          option1: option1,
+          option1: defaultOption1,
           option2: option2,
           option3: option3,
         };
@@ -431,17 +439,18 @@ export const exportProductToStore = async (
     );
   } else {
     // Add a default variant if no variants are present
+    const productTitle = detailedProduct.title || "Untitled Product";
     console.log("No variants found, creating default variant");
     productPayload.product.options = [{ name: "Title" }];
     productPayload.product.variants = [
       {
-        title: "Default Title",
+        title: productTitle,
         price: "0.00",
         compare_at_price: null,
         sku: "",
         barcode: "",
         inventory_quantity: 0,
-        option_values: ["Default Title"],
+        option_values: [productTitle],
       },
     ];
   }
