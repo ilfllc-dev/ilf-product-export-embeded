@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Modal, Select } from "@shopify/polaris";
+import { Modal, Select, ChoiceList, Text, InlineStack, Badge } from "@shopify/polaris";
 
 interface Store {
   id: string;
@@ -12,12 +12,12 @@ interface ProductExportModalProps {
   onClose: () => void;
   product: any;
   stores: Store[];
-  toStore: string;
-  setToStore: (id: string) => void;
+  selectedStores: string[];
+  setSelectedStores: (ids: string[]) => void;
   currentStoreName: string;
   onExportProduct: (
     product: any,
-    toStore: string,
+    toStores: string[],
     status: "draft" | "active",
   ) => Promise<any>;
 }
@@ -27,8 +27,8 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   onClose,
   product,
   stores,
-  toStore,
-  setToStore,
+  selectedStores,
+  setSelectedStores,
   currentStoreName,
   onExportProduct,
 }) => {
@@ -44,8 +44,10 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   console.log("ProductExportModal - product.title:", product.title);
   console.log("ProductExportModal - product.id:", product.id);
 
-  const toStoreObj = stores.find((store) => store.id === toStore);
-  const storeOptions = stores.map((store) => ({
+  const selectedStoreObjects = stores.filter((store) =>
+    selectedStores.includes(store.id),
+  );
+  const storeChoices = stores.map((store) => ({
     label: store.name || store.shop,
     value: store.id,
   }));
@@ -74,13 +76,18 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
         onClose={onClose}
         title="Export Product"
         primaryAction={{
-          content: isExporting ? "Exporting..." : "Export Product",
+          content: isExporting
+            ? `Exporting to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}...`
+            : `Export to ${selectedStores.length} Store${selectedStores.length !== 1 ? "s" : ""}`,
           onAction: async () => {
+            if (selectedStores.length === 0) {
+              return;
+            }
             setIsExporting(true);
             try {
               const result = await onExportProduct(
                 product,
-                toStore,
+                selectedStores,
                 productStatus,
               );
               setIsExporting(false);
@@ -89,7 +96,9 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 shopify.toast &&
                 shopify.toast.show
               ) {
-                const message = result?.message || "Product saved";
+                const message =
+                  result?.message ||
+                  `Product exported to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`;
                 shopify.toast.show(message, { duration: 5000 });
               }
               onClose();
@@ -99,7 +108,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
             }
           },
           loading: isExporting,
-          disabled: isExporting,
+          disabled: isExporting || selectedStores.length === 0,
         }}
         secondaryActions={[
           {
@@ -223,10 +232,32 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 display: "flex",
                 flexDirection: "column",
                 alignItems: "center",
+                gap: 8,
               }}
             >
               <span style={{ fontWeight: 600, marginBottom: 8 }}>TO</span>
-              {toStoreObj && (
+              {selectedStores.length === 0 ? (
+                <div
+                  style={{
+                    background: "#f6f6f7",
+                    padding: "8px 24px",
+                    borderRadius: 8,
+                    fontWeight: 400,
+                    minWidth: 180,
+                    maxWidth: 240,
+                    width: 240,
+                    textAlign: "center",
+                    fontSize: 14,
+                    height: 48,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    color: "#888",
+                  }}
+                >
+                  Select stores
+                </div>
+              ) : selectedStores.length === 1 ? (
                 <div
                   style={{
                     background: "#FFE3E3",
@@ -244,7 +275,28 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                     justifyContent: "center",
                   }}
                 >
-                  {toStoreObj.name || toStoreObj.shop}
+                  {selectedStoreObjects[0]?.name ||
+                    selectedStoreObjects[0]?.shop}
+                </div>
+              ) : (
+                <div
+                  style={{
+                    background: "#FFE3E3",
+                    padding: "8px 24px",
+                    borderRadius: 8,
+                    fontWeight: 600,
+                    minWidth: 180,
+                    maxWidth: 240,
+                    width: 240,
+                    textAlign: "center",
+                    fontSize: 16,
+                    height: 48,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {selectedStores.length} stores
                 </div>
               )}
             </div>
@@ -252,13 +304,24 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
         </Modal.Section>
         <Modal.Section>
           <div style={{ marginBottom: "1rem", width: "100%" }}>
-            <Select
-              label="Select target store"
-              labelHidden
-              options={storeOptions}
-              value={toStore}
-              onChange={setToStore}
+            <ChoiceList
+              title="Select target stores"
+              choices={storeChoices}
+              selected={selectedStores}
+              onChange={setSelectedStores}
+              allowMultiple
             />
+            {selectedStores.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <InlineStack gap="200" wrap>
+                  {selectedStoreObjects.map((store) => (
+                    <Badge key={store.id} tone="info">
+                      {store.name || store.shop}
+                    </Badge>
+                  ))}
+                </InlineStack>
+              </div>
+            )}
           </div>
           <div style={{ width: "100%" }}>
             <Select

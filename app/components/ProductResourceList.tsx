@@ -129,7 +129,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
                 }
               }}
             >
-              Export to Store
+              Export {selectedResources.length > 0 ? `(${selectedResources.length})` : ""}
             </Button>
           </InlineStack>
         </InlineStack>
