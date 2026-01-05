@@ -1,5 +1,7 @@
 # Product Export App
 
+# Associated partner account is jonathanator14@gmail.com for this apps deployment
+
 ## Deployment
 
 Deployed on Render.io using Docker. Each deployment uses a separate branch and Shopify app.
