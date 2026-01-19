@@ -129,7 +129,10 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
                 }
               }}
             >
-              Export {selectedResources.length > 0 ? `(${selectedResources.length})` : ""}
+              Export selected
+              {selectedResources.length > 0
+                ? ` (${selectedResources.length})`
+                : ""}
             </Button>
           </InlineStack>
         </InlineStack>
@@ -147,6 +150,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
           { title: "Inventory" },
           { title: "Category" },
           { title: "Channels" },
+          { title: "Actions" },
         ]}
         loading={loading}
       >
@@ -156,7 +160,6 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
             key={product.id}
             selected={selectedResources.includes(product.id)}
             position={index}
-            onClick={() => onProductClick(product)}
           >
             <IndexTable.Cell>
               <InlineStack gap="200" align="start">
@@ -189,6 +192,9 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
             </IndexTable.Cell>
             <IndexTable.Cell>
               <Text as="span">{product.channels ?? 1}</Text>
+            </IndexTable.Cell>
+            <IndexTable.Cell>
+              <Button onClick={() => onProductClick(product)}>Export</Button>
             </IndexTable.Cell>
           </IndexTable.Row>
         ))}
