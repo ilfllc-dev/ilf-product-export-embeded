@@ -317,57 +317,62 @@ export default function ProductList() {
 
     const results = [];
     const errors = [];
-    let totalExports = 0;
     let successfulExports = 0;
     let failedExports = 0;
+    const totalExports = productsToExport.length * toStores.length;
 
-    // Nested loop: for each product, export to each store
-    for (const product of productsToExport) {
-      for (const toStore of toStores) {
-        totalExports++;
-        try {
-          const res = await fetch("/app/api/export-product", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ product, toStore, status }),
-          });
+    // Export all selected products to each store in batches
+    for (const toStore of toStores) {
+      try {
+        const res = await fetch("/app/api/export-products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ products: productsToExport, toStore, status }),
+        });
 
-          if (!res.ok) {
-            const errorText = await res.text();
-            console.error(
-              `Export failed for product ${product.title} to store ${toStore}:`,
-              errorText,
-            );
-            errors.push({
-              productId: product.id,
-              productTitle: product.title,
-              storeId: toStore,
-              error: errorText,
-            });
-            failedExports++;
-          } else {
-            const result = await res.json();
-            results.push({
-              productId: product.id,
-              productTitle: product.title,
-              storeId: toStore,
-              result,
-            });
-            successfulExports++;
-          }
-        } catch (err: any) {
+        if (!res.ok) {
+          const errorText = await res.text();
           console.error(
-            `Export error for product ${product.title} to store ${toStore}:`,
-            err,
+            `Bulk export failed for store ${toStore}:`,
+            errorText,
           );
           errors.push({
-            productId: product.id,
-            productTitle: product.title,
             storeId: toStore,
-            error: err.message || "Failed to export product",
+            error: errorText,
           });
-          failedExports++;
+          failedExports += productsToExport.length;
+          continue;
         }
+
+        const result = await res.json();
+        const storeSuccessful =
+          result?.summary?.successful ?? result?.results?.length ?? 0;
+        const storeFailed =
+          result?.summary?.failed ?? result?.errors?.length ?? 0;
+
+        successfulExports += storeSuccessful;
+        failedExports += storeFailed;
+
+        results.push({
+          storeId: toStore,
+          result,
+        });
+
+        if (Array.isArray(result?.errors) && result.errors.length > 0) {
+          errors.push(
+            ...result.errors.map((error: any) => ({
+              storeId: toStore,
+              ...error,
+            })),
+          );
+        }
+      } catch (err: any) {
+        console.error(`Bulk export error for store ${toStore}:`, err);
+        errors.push({
+          storeId: toStore,
+          error: err.message || "Failed to export products",
+        });
+        failedExports += productsToExport.length;
       }
     }
 
