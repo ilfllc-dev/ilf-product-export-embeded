@@ -503,6 +503,7 @@ export default function ProductList() {
                       )?.node;
                       setSelectedProduct(product);
                     }}
+                    selectedProductIds={selectedProductIds}
                     onSelectionChange={(selectedIds) => {
                       setSelectedProductIds(selectedIds);
                     }}

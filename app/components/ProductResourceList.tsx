@@ -1,11 +1,10 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   Card,
   IndexTable,
   TextField,
   Avatar,
   Text,
-  useIndexResourceState,
   Button,
   Badge,
   Icon,
@@ -31,6 +30,7 @@ interface ProductResourceListProps {
   }>;
   onProductClick: (product: any) => void;
   loading?: boolean;
+  selectedProductIds: string[];
   onSelectionChange?: (selected: string[]) => void;
   onBulkExport?: (selected: string[]) => void;
 }
@@ -39,6 +39,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
   products,
   onProductClick,
   loading,
+  selectedProductIds,
   onSelectionChange,
   onBulkExport,
 }) => {
@@ -53,16 +54,70 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
     [products, search],
   );
 
-  const resourceName = { singular: "product", plural: "products" };
-  const { selectedResources, allResourcesSelected, handleSelectionChange } =
-    useIndexResourceState(filteredProducts);
+  // FIX: Track visible IDs so selection persists across searches.
+  const visibleProductIds = useMemo(
+    () => filteredProducts.map((product) => product.id),
+    [filteredProducts],
+  );
+  const visibleSelectedCount = useMemo(
+    () =>
+      filteredProducts.filter((product) =>
+        selectedProductIds.includes(product.id),
+      ).length,
+    [filteredProducts, selectedProductIds],
+  );
+  const allVisibleSelected =
+    visibleProductIds.length > 0 &&
+    visibleSelectedCount === visibleProductIds.length;
 
-  // Notify parent of selection changes
-  React.useEffect(() => {
-    if (onSelectionChange) {
-      onSelectionChange(selectedResources);
-    }
-  }, [selectedResources, onSelectionChange]);
+  const resourceName = { singular: "product", plural: "products" };
+  const handleSelectionChange = useCallback(
+    (selectionType: any, isSelecting: boolean, selection: string | string[]) => {
+      if (!onSelectionChange) {
+        return;
+      }
+
+      const normalizedSelectionType =
+        typeof selectionType === "string"
+          ? selectionType.toLowerCase()
+          : selectionType;
+      const nextSelected = new Set(selectedProductIds);
+      const removeVisible = () => {
+        visibleProductIds.forEach((id) => nextSelected.delete(id));
+      };
+      const addVisible = () => {
+        visibleProductIds.forEach((id) => nextSelected.add(id));
+      };
+
+      // FIX: Merge selection changes from the filtered view into global selection.
+      if (normalizedSelectionType === "all" || normalizedSelectionType === "page") {
+        if (isSelecting) {
+          addVisible();
+        } else {
+          removeVisible();
+        }
+      } else if (normalizedSelectionType === "single") {
+        const id = selection as string;
+        if (isSelecting) {
+          nextSelected.add(id);
+        } else {
+          nextSelected.delete(id);
+        }
+      } else if (Array.isArray(selection)) {
+        removeVisible();
+        selection.forEach((id) => nextSelected.add(id));
+      } else if (typeof selection === "string") {
+        if (isSelecting) {
+          nextSelected.add(selection);
+        } else {
+          nextSelected.delete(selection);
+        }
+      }
+
+      onSelectionChange(Array.from(nextSelected));
+    },
+    [onSelectionChange, selectedProductIds, visibleProductIds],
+  );
 
   // Filter popover (placeholder for future filter logic)
   const filterPopover = (
@@ -113,25 +168,25 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
             </Text>
             <Button
               variant="primary"
-              disabled={selectedResources.length === 0}
+              disabled={selectedProductIds.length === 0}
               onClick={() => {
-                if (selectedResources.length === 1) {
-                  // If only one product is selected, open the modal for that product
-                  const selectedProduct = filteredProducts.find(
-                    (p) => p.id === selectedResources[0],
+                if (selectedProductIds.length === 1) {
+                  // FIX: Use the global selection when a search filter is active.
+                  const selectedProduct = products.find(
+                    (p) => p.id === selectedProductIds[0],
                   );
                   if (selectedProduct && onProductClick) {
                     onProductClick(selectedProduct);
                   }
                 } else if (onBulkExport) {
                   // If multiple products are selected, use bulk export
-                  onBulkExport(selectedResources);
+                  onBulkExport(selectedProductIds);
                 }
               }}
             >
               Export selected
-              {selectedResources.length > 0
-                ? ` (${selectedResources.length})`
+              {selectedProductIds.length > 0
+                ? ` (${selectedProductIds.length})`
                 : ""}
             </Button>
           </InlineStack>
@@ -141,7 +196,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
         resourceName={resourceName}
         itemCount={filteredProducts.length}
         selectedItemsCount={
-          allResourcesSelected ? "All" : selectedResources.length
+          allVisibleSelected ? "All" : visibleSelectedCount
         }
         onSelectionChange={handleSelectionChange}
         headings={[
@@ -158,7 +213,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
           <IndexTable.Row
             id={product.id}
             key={product.id}
-            selected={selectedResources.includes(product.id)}
+            selected={selectedProductIds.includes(product.id)}
             position={index}
           >
             <IndexTable.Cell>
