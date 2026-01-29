@@ -268,71 +268,129 @@ export const exportProductToStore = async (
   // 2. Check if product already exists by searching for it using the original product ID
   console.log("Checking if product already exists...");
 
-  // Search for products with the same title first (more efficient)
-  const searchRes = await fetch(
-    `https://${shop}/admin/api/2023-10/products.json?title=${encodeURIComponent(detailedProduct.title)}&limit=50`,
-    {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-    },
-  );
+  let existingProduct: { id: string; title?: string } | null = null;
 
-  let existingProduct = null;
-  if (searchRes.ok) {
-    const searchData = await searchRes.json();
-    console.log(
-      `Found ${searchData.products.length} products with title: "${detailedProduct.title}"`,
-    );
-
-    // Look for a product that has a metafield with the original product ID
-    for (const p of searchData.products) {
-      try {
-        const metafieldsRes = await fetch(
-          `https://${shop}/admin/api/2023-10/products/${p.id}/metafields.json`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Shopify-Access-Token": accessToken,
-            },
-          },
-        );
-
-        if (metafieldsRes.ok) {
-          const metafieldsData = await metafieldsRes.json();
-          const originalIdMetafield = metafieldsData.metafields.find(
-            (mf: any) =>
-              mf.namespace === "product_export" &&
-              mf.key === "original_product_id",
-          );
-
-          if (
-            originalIdMetafield &&
-            originalIdMetafield.value === detailedProduct.id
-          ) {
-            existingProduct = p;
-            console.log(
-              "Found existing product by original ID:",
-              existingProduct.id,
-            );
-            break;
+  // FIX: Prefer a metafield lookup by original product ID to avoid title mismatches.
+  try {
+    const metafieldQuery = `#graphql
+      query FindProductByOriginalId($query: String!) {
+        products(first: 1, query: $query) {
+          edges {
+            node {
+              id
+              title
+            }
           }
         }
-      } catch (error) {
-        console.log("Error checking metafields for product:", p.id, error);
       }
-    }
+    `;
+    const queryValue = `metafield:product_export.original_product_id:"${detailedProduct.id}"`;
+    const metafieldRes = await fetch(
+      `https://${shop}/admin/api/2023-10/graphql.json`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+        body: JSON.stringify({
+          query: metafieldQuery,
+          variables: { query: queryValue },
+        }),
+      },
+    );
 
-    if (!existingProduct) {
+    if (metafieldRes.ok) {
+      const metafieldData = await metafieldRes.json();
+      const existingNode =
+        metafieldData?.data?.products?.edges?.[0]?.node || null;
+      if (existingNode?.id) {
+        const numericId = existingNode.id.split("/").pop();
+        if (numericId) {
+          existingProduct = { id: numericId, title: existingNode.title };
+          console.log(
+            "Found existing product by original ID metafield:",
+            existingProduct.id,
+          );
+        }
+      }
+    } else {
+      const metafieldErr = await metafieldRes.text();
       console.log(
-        "No existing product found with matching original ID, will create new one",
+        "Metafield lookup failed, falling back to title search:",
+        metafieldErr,
       );
     }
-  } else {
-    console.log("Product search failed, will attempt to create new product");
+  } catch (error) {
+    console.log("Metafield lookup error, falling back to title search:", error);
+  }
+
+  if (!existingProduct) {
+    // FIX: Fallback to title search for legacy products without metafields.
+    const searchRes = await fetch(
+      `https://${shop}/admin/api/2023-10/products.json?title=${encodeURIComponent(detailedProduct.title)}&limit=50`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+      },
+    );
+
+    if (searchRes.ok) {
+      const searchData = await searchRes.json();
+      console.log(
+        `Found ${searchData.products.length} products with title: "${detailedProduct.title}"`,
+      );
+
+      // Look for a product that has a metafield with the original product ID
+      for (const p of searchData.products) {
+        try {
+          const metafieldsRes = await fetch(
+            `https://${shop}/admin/api/2023-10/products/${p.id}/metafields.json`,
+            {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": accessToken,
+              },
+            },
+          );
+
+          if (metafieldsRes.ok) {
+            const metafieldsData = await metafieldsRes.json();
+            const originalIdMetafield = metafieldsData.metafields.find(
+              (mf: any) =>
+                mf.namespace === "product_export" &&
+                mf.key === "original_product_id",
+            );
+
+            if (
+              originalIdMetafield &&
+              originalIdMetafield.value === detailedProduct.id
+            ) {
+              existingProduct = p;
+              console.log(
+                "Found existing product by original ID:",
+                existingProduct.id,
+              );
+              break;
+            }
+          }
+        } catch (error) {
+          console.log("Error checking metafields for product:", p.id, error);
+        }
+      }
+
+      if (!existingProduct) {
+        console.log(
+          "No existing product found with matching original ID, will create new one",
+        );
+      }
+    } else {
+      console.log("Product search failed, will attempt to create new product");
+    }
   }
 
   // 3. Map product data to Shopify REST API format
