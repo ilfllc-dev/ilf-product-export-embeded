@@ -28,6 +28,12 @@ import { BulkExportModal } from "../components/BulkExportModal";
 import { TargetStoresList } from "../components/TargetStoresList";
 import { AppUninstalledBanner } from "../components/AppUninstalledBanner";
 
+type ExportProgress = {
+  completed: number;
+  total: number;
+  failed: number;
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Authenticate with Shopify to get current store's data
   let admin = null;
@@ -227,6 +233,7 @@ export default function ProductList() {
     product: any,
     toStores: string[],
     status: "draft" | "active",
+    onProgress?: (progress: ExportProgress) => void,
   ) => {
     if (toStores.length === 0) {
       throw new Error("Please select at least one store");
@@ -234,6 +241,14 @@ export default function ProductList() {
 
     const results = [];
     const errors = [];
+    let completed = 0;
+    let failed = 0;
+    const total = toStores.length;
+    const reportProgress = () => {
+      onProgress?.({ completed, total, failed });
+    };
+
+    reportProgress();
 
     // Export to each store sequentially
     for (const toStore of toStores) {
@@ -251,12 +266,15 @@ export default function ProductList() {
             storeId: toStore,
             error: errorText,
           });
+          completed += 1;
+          failed += 1;
         } else {
           const result = await res.json();
           results.push({
             storeId: toStore,
             result,
           });
+          completed += 1;
         }
       } catch (err: any) {
         console.error(`Export error for store ${toStore}:`, err);
@@ -264,7 +282,11 @@ export default function ProductList() {
           storeId: toStore,
           error: err.message || "Failed to export product",
         });
+        completed += 1;
+        failed += 1;
       }
+
+      reportProgress();
     }
 
     // Return summary
@@ -298,6 +320,7 @@ export default function ProductList() {
     productIds: string[],
     toStores: string[],
     status: "draft" | "active",
+    onProgress?: (progress: ExportProgress) => void,
   ) => {
     if (toStores.length === 0) {
       throw new Error("Please select at least one store");
@@ -317,9 +340,18 @@ export default function ProductList() {
 
     const results = [];
     const errors = [];
-    let successfulExports = 0;
     let failedExports = 0;
     const totalExports = productsToExport.length * toStores.length;
+    let completedExports = 0;
+    const reportProgress = () => {
+      onProgress?.({
+        completed: completedExports,
+        total: totalExports,
+        failed: failedExports,
+      });
+    };
+
+    reportProgress();
 
     // Export all selected products to each store in batches
     for (const toStore of toStores) {
@@ -341,17 +373,20 @@ export default function ProductList() {
             error: errorText,
           });
           failedExports += productsToExport.length;
+          completedExports += productsToExport.length;
+          reportProgress();
           continue;
         }
 
         const result = await res.json();
         const storeSuccessful =
           result?.summary?.successful ?? result?.results?.length ?? 0;
-        const storeFailed =
-          result?.summary?.failed ?? result?.errors?.length ?? 0;
+        const storeFailed = result?.summary?.failed ?? result?.errors?.length ?? 0;
+        const storeTotal =
+          storeSuccessful + storeFailed || productsToExport.length;
 
-        successfulExports += storeSuccessful;
         failedExports += storeFailed;
+        completedExports += storeTotal;
 
         results.push({
           storeId: toStore,
@@ -366,6 +401,7 @@ export default function ProductList() {
             })),
           );
         }
+        reportProgress();
       } catch (err: any) {
         console.error(`Bulk export error for store ${toStore}:`, err);
         errors.push({
@@ -373,10 +409,13 @@ export default function ProductList() {
           error: err.message || "Failed to export products",
         });
         failedExports += productsToExport.length;
+        completedExports += productsToExport.length;
+        reportProgress();
       }
     }
 
     // Return summary
+    const successfulExports = completedExports - failedExports;
     if (failedExports === 0) {
       return {
         success: true,

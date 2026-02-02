@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Modal,
   ChoiceList,
@@ -7,6 +7,7 @@ import {
   Badge,
   Select,
   BlockStack,
+  ProgressBar,
 } from "@shopify/polaris";
 
 interface Store {
@@ -27,6 +28,11 @@ interface BulkExportModalProps {
     productIds: string[],
     toStores: string[],
     status: "draft" | "active",
+    onProgress?: (progress: {
+      completed: number;
+      total: number;
+      failed: number;
+    }) => void,
   ) => Promise<any>;
 }
 
@@ -41,9 +47,21 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
   onBulkExport,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    completed: number;
+    total: number;
+    failed: number;
+  } | null>(null);
   const [productStatus, setProductStatus] = useState<"draft" | "active">(
     "draft",
   );
+
+  useEffect(() => {
+    if (!open) {
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }, [open]);
 
   const selectedStoreObjects = stores.filter((store) =>
     selectedStores.includes(store.id),
@@ -58,12 +76,18 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       return;
     }
 
+    setExportProgress({
+      completed: 0,
+      total: selectedProducts.length * selectedStores.length,
+      failed: 0,
+    });
     setIsExporting(true);
     try {
       const result = await onBulkExport(
         selectedProducts,
         selectedStores,
         productStatus,
+        (progress) => setExportProgress(progress),
       );
       setIsExporting(false);
 
@@ -92,6 +116,11 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       }
     }
   };
+
+  const progressPercent =
+    exportProgress && exportProgress.total > 0
+      ? Math.round((exportProgress.completed / exportProgress.total) * 100)
+      : 0;
 
   return (
     <Modal
@@ -173,6 +202,22 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
           </div>
         </BlockStack>
       </Modal.Section>
+      {isExporting && exportProgress && (
+        <Modal.Section>
+          <BlockStack gap="200">
+            <Text as="p" variant="bodyMd" fontWeight="semibold">
+              Exported {exportProgress.completed} of {exportProgress.total}{" "}
+              item{exportProgress.total !== 1 ? "s" : ""}
+            </Text>
+            <ProgressBar progress={progressPercent} size="small" />
+            {exportProgress.failed > 0 && (
+              <Text as="p" variant="bodySm" tone="critical">
+                {exportProgress.failed} failed
+              </Text>
+            )}
+          </BlockStack>
+        </Modal.Section>
+      )}
     </Modal>
   );
 };
