@@ -1,5 +1,14 @@
-import React, { useState } from "react";
-import { Modal, Select, ChoiceList, Text, InlineStack, Badge } from "@shopify/polaris";
+import React, { useEffect, useState } from "react";
+import {
+  Modal,
+  Select,
+  ChoiceList,
+  Text,
+  InlineStack,
+  Badge,
+  ProgressBar,
+  BlockStack,
+} from "@shopify/polaris";
 
 interface Store {
   id: string;
@@ -19,6 +28,11 @@ interface ProductExportModalProps {
     product: any,
     toStores: string[],
     status: "draft" | "active",
+    onProgress?: (progress: {
+      completed: number;
+      total: number;
+      failed: number;
+    }) => void,
   ) => Promise<any>;
 }
 
@@ -33,9 +47,21 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   onExportProduct,
 }) => {
   const [isExporting, setIsExporting] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{
+    completed: number;
+    total: number;
+    failed: number;
+  } | null>(null);
   const [productStatus, setProductStatus] = useState<"draft" | "active">(
     "draft",
   );
+
+  useEffect(() => {
+    if (!open) {
+      setIsExporting(false);
+      setExportProgress(null);
+    }
+  }, [open]);
 
   if (!product) return null;
 
@@ -69,6 +95,11 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   const productType = product.productType || "";
   const productPrice = product.variants?.edges?.[0]?.node?.price || "";
 
+  const progressPercent =
+    exportProgress && exportProgress.total > 0
+      ? Math.round((exportProgress.completed / exportProgress.total) * 100)
+      : 0;
+
   return (
     <>
       <Modal
@@ -83,12 +114,18 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
             if (selectedStores.length === 0) {
               return;
             }
+            setExportProgress({
+              completed: 0,
+              total: selectedStores.length,
+              failed: 0,
+            });
             setIsExporting(true);
             try {
               const result = await onExportProduct(
                 product,
                 selectedStores,
                 productStatus,
+                (progress) => setExportProgress(progress),
               );
               setIsExporting(false);
               if (
@@ -337,6 +374,22 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
             />
           </div>
         </Modal.Section>
+        {isExporting && exportProgress && (
+          <Modal.Section>
+            <BlockStack gap="200">
+              <Text as="p" variant="bodyMd" fontWeight="semibold">
+                Exported {exportProgress.completed} of {exportProgress.total}{" "}
+                item{exportProgress.total !== 1 ? "s" : ""}
+              </Text>
+              <ProgressBar progress={progressPercent} size="small" />
+              {exportProgress.failed > 0 && (
+                <Text as="p" variant="bodySm" tone="critical">
+                  {exportProgress.failed} failed
+                </Text>
+              )}
+            </BlockStack>
+          </Modal.Section>
+        )}
       </Modal>
     </>
   );
