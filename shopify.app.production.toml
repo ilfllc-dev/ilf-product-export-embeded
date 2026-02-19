@@ -2,7 +2,7 @@ client_id = "d99f8bbe7d0eb2cf598b442bd7b83b38"
 
 name = "product-export-production"
 handle = "product-export-prod"
-application_url = "https://ilf-product-export-embeded.onrender.com"
+application_url = "https://jellyfish-app-3qksh.ondigitalocean.app"
 embedded = true
 
 [build]
@@ -25,9 +25,9 @@ scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://ilf-product-export-embeded.onrender.com/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/api/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/auth/shopify/callback"
+  "https://jellyfish-app-3qksh.ondigitalocean.app/auth/callback",
+  "https://jellyfish-app-3qksh.ondigitalocean.app/api/auth/callback",
+  "https://jellyfish-app-3qksh.ondigitalocean.app/auth/shopify/callback"
 ]
 [pos]
 embedded = false
