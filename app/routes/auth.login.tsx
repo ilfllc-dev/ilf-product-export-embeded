@@ -15,34 +15,35 @@ export const loader = async ({ request }: any) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   const error = url.searchParams.get("error");
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
 
   // If we have a shop parameter, try to initiate OAuth
   if (shop) {
     try {
       // Create the OAuth authorization URL
-      const apiKey = process.env.SHOPIFY_API_KEY;
-      const appUrl = process.env.SHOPIFY_APP_URL;
       const scopes = "read_products,write_products";
 
       if (!apiKey || !appUrl) {
-        return json({ error: "Configuration missing", shop });
+        return json({ error: "Configuration missing", shop, apiKey, appUrl });
       }
 
       // For embedded apps, use the embedded OAuth flow
-      const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${scopes}&redirect_uri=${appUrl}/auth/callback&state=${shop}`;
+      const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`;
 
       return redirect(authUrl);
     } catch (error: any) {
-      return json({ error: "OAuth initiation failed", shop });
+      return json({ error: "OAuth initiation failed", shop, apiKey, appUrl });
     }
   }
 
   // If no shop parameter, show installation instructions
-  return json({ error, shop: null });
+  return json({ error, shop: null, apiKey, appUrl });
 };
 
 export default function LoginPage() {
-  const { error, shop } = useLoaderData<typeof loader>();
+  const { error, shop, apiKey, appUrl } = useLoaderData<typeof loader>();
+  const isConfigMissing = !apiKey || !appUrl;
 
   return (
     <Page>
@@ -58,6 +59,14 @@ export default function LoginPage() {
                 <Box padding="400" background="bg-surface-selected">
                   <Text as="p" variant="bodyMd" tone="critical">
                     Error: {error}
+                  </Text>
+                </Box>
+              )}
+              {isConfigMissing && (
+                <Box padding="400" background="bg-surface-selected">
+                  <Text as="p" variant="bodyMd" tone="critical">
+                    App configuration is missing. Set SHOPIFY_API_KEY and
+                    SHOPIFY_APP_URL in your environment.
                   </Text>
                 </Box>
               )}
@@ -99,7 +108,8 @@ export default function LoginPage() {
                 <InlineStack gap="200">
                   <Button
                     variant="primary"
-                    url={`https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_products,write_products&redirect_uri=${process.env.SHOPIFY_APP_URL}/auth/callback&state=${shop}`}
+                    disabled={isConfigMissing}
+                    url={`https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent("read_products,write_products")}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`}
                   >
                     Install App on {shop}
                   </Button>

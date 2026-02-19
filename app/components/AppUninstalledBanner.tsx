@@ -6,10 +6,9 @@ interface AppUninstalledBannerProps {
 
 export function AppUninstalledBanner({ shop }: AppUninstalledBannerProps) {
   const handleReinstall = () => {
-    // Redirect to Shopify app installation
+    // Use server-side login route so env config is resolved on the server
     if (shop) {
-      const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${process.env.SHOPIFY_API_KEY}&scope=read_products,write_products&redirect_uri=${process.env.SHOPIFY_APP_URL}/auth/callback`;
-      window.location.href = installUrl;
+      window.location.href = `/auth/login?shop=${encodeURIComponent(shop)}`;
     } else {
       // Fallback to app store
       window.open("https://apps.shopify.com", "_blank");

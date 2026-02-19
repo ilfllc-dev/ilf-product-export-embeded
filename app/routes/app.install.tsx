@@ -17,22 +17,23 @@ export const loader = async ({ request }: any) => {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
   const error = url.searchParams.get("error");
+  const apiKey = process.env.SHOPIFY_API_KEY || "";
+  const appUrl = process.env.SHOPIFY_APP_URL || "";
 
-  return json({ shop, error });
+  return json({ shop, error, apiKey, appUrl });
 };
 
 export default function InstallPage() {
-  const { shop: initialShop, error } = useLoaderData<typeof loader>();
+  const { shop: initialShop, error, apiKey, appUrl } =
+    useLoaderData<typeof loader>();
   const [shop, setShop] = useState(initialShop || "");
+  const isConfigMissing = !apiKey || !appUrl;
 
   const handleInstall = () => {
-    if (!shop) return;
-
-    const apiKey = process.env.SHOPIFY_API_KEY;
-    const appUrl = process.env.SHOPIFY_APP_URL;
+    if (!shop || isConfigMissing) return;
     const scopes = "read_products,write_products";
 
-    const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${scopes}&redirect_uri=${appUrl}/auth/callback&state=${shop}`;
+    const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`;
 
     window.location.href = installUrl;
   };
@@ -51,6 +52,14 @@ export default function InstallPage() {
                 <Box padding="400" background="bg-surface-selected">
                   <Text as="p" variant="bodyMd" tone="critical">
                     Error: {error}
+                  </Text>
+                </Box>
+              )}
+              {isConfigMissing && (
+                <Box padding="400" background="bg-surface-selected">
+                  <Text as="p" variant="bodyMd" tone="critical">
+                    App configuration is missing. Set SHOPIFY_API_KEY and
+                    SHOPIFY_APP_URL in your environment.
                   </Text>
                 </Box>
               )}
@@ -74,7 +83,7 @@ export default function InstallPage() {
                 <Button
                   variant="primary"
                   onClick={handleInstall}
-                  disabled={!shop}
+                  disabled={!shop || isConfigMissing}
                 >
                   Install App
                 </Button>
