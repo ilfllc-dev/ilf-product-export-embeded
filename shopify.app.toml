@@ -25,7 +25,7 @@ api_version = "2025-04"
 scopes = "read_products,write_products"
 
 [auth]
-redirect_urls = ["https://jellyfish-app-3qksh.ondigitalocean.app/auth/callback", "https://ilf-product-export-embeded.onrender.com/auth/auth/shopify/callback", "https://ilf-product-export-embeded.onrender.com/api/auth/callback"]
+redirect_urls = ["https://jellyfish-app-3qksh.ondigitalocean.app/auth/callback", "https://jellyfish-app-3qksh.ondigitalocean.app/auth/auth/shopify/callback", "https://jellyfish-app-3qksh.ondigitalocean.app/api/auth/callback"]
 [pos]
 embedded = false
 
