@@ -2,7 +2,7 @@ client_id = "2b52d8282b9c451c11f0a54c557936be"
 
 name = "product-export-production-2"
 handle = "product-export-prod-2"
-application_url = "https://ilf-product-export-embeded-2.onrender.com"
+application_url = "https://stingray-app-pbjrp.ondigitalocean.app"
 embedded = true
 
 [build]
@@ -25,9 +25,9 @@ scopes = "read_products,write_products"
 
 [auth]
 redirect_urls = [
-  "https://ilf-product-export-embeded-2.onrender.com/auth/callback",
-  "https://ilf-product-export-embeded-2.onrender.com/api/auth/callback",
-  "https://ilf-product-export-embeded-2.onrender.com/auth/shopify/callback",
+  "https://stingray-app-pbjrp.ondigitalocean.app/auth/callback",
+  "https://stingray-app-pbjrp.ondigitalocean.app/api/auth/callback",
+  "https://stingray-app-pbjrp.ondigitalocean.app/auth/shopify/callback",
 ]
 [pos]
 embedded = false
