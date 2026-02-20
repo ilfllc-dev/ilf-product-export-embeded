@@ -31,11 +31,7 @@ export default function InstallPage() {
 
   const handleInstall = () => {
     if (!shop || isConfigMissing) return;
-    const scopes = "read_products,write_products";
-
-    const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`;
-
-    window.location.href = installUrl;
+    window.location.href = `/auth/login?shop=${encodeURIComponent(shop)}`;
   };
 
   return (

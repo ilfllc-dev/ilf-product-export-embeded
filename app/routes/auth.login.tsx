@@ -29,7 +29,7 @@ export const loader = async ({ request }: any) => {
       }
 
       // For embedded apps, use the embedded OAuth flow
-      const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`;
+      const authUrl = `https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/shopify/callback`)}&state=${encodeURIComponent(shop)}`;
 
       return redirect(authUrl);
     } catch (error: any) {
@@ -109,7 +109,7 @@ export default function LoginPage() {
                   <Button
                     variant="primary"
                     disabled={isConfigMissing}
-                    url={`https://${shop}/admin/oauth/authorize?client_id=${apiKey}&scope=${encodeURIComponent("read_products,write_products")}&redirect_uri=${encodeURIComponent(`${appUrl}/auth/callback`)}&state=${encodeURIComponent(shop)}`}
+                    url={`/auth/login?shop=${encodeURIComponent(shop)}`}
                   >
                     Install App on {shop}
                   </Button>
