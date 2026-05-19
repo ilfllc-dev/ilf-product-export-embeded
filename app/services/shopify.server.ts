@@ -89,6 +89,9 @@ export const fetchShopifyProducts = async (
             vendor
             productType
             tags
+            availablePublicationsCount {
+              count
+            }
             bodyHtml
             images(first: 1) {
               edges {
@@ -120,6 +123,30 @@ export const fetchShopifyProducts = async (
     console.log("GraphQL response:", JSON.stringify(responseJson, null, 2));
 
     if (responseJson.errors) {
+      const channelFieldError = responseJson.errors.some(
+        (error: any) =>
+          typeof error?.message === "string" &&
+          error.message.includes("availablePublicationsCount"),
+      );
+
+      if (channelFieldError) {
+        console.log(
+          "availablePublicationsCount not supported on this API version; retrying product query without channel count",
+        );
+        const fallbackQuery = query.replace(
+          /\s*availablePublicationsCount\s*\{\s*count\s*\}\s*/g,
+          "\n",
+        );
+
+        const fallbackResponse = await admin.graphql(fallbackQuery, {
+          variables,
+        });
+        const fallbackJson = await fallbackResponse.json();
+        if (!fallbackJson.errors && fallbackJson?.data?.products) {
+          return fallbackJson.data.products;
+        }
+      }
+
       console.error(
         "GraphQL errors:",
         JSON.stringify(responseJson.errors, null, 2),
@@ -157,6 +184,10 @@ export const fetchDetailedProductForExport = async (
         productType
         tags
         bodyHtml
+        options {
+          name
+          position
+        }
         images(first: 50) {
           edges {
             node {
@@ -176,6 +207,14 @@ export const fetchDetailedProductForExport = async (
               inventoryQuantity
               sku
               barcode
+              inventoryItem {
+                measurement {
+                  weight {
+                    value
+                    unit
+                  }
+                }
+              }
               selectedOptions {
                 name
                 value
@@ -226,6 +265,286 @@ export const fetchDetailedProductForExport = async (
   }
 };
 
+const mapGraphqlWeightUnitToRest = (unit: string | null | undefined) => {
+  switch (unit) {
+    case "GRAMS":
+      return "g";
+    case "KILOGRAMS":
+      return "kg";
+    case "POUNDS":
+      return "lb";
+    case "OUNCES":
+      return "oz";
+    default:
+      return undefined;
+  }
+};
+
+const getVariantWeight = (variant: any) => {
+  const weight = variant?.inventoryItem?.measurement?.weight;
+  if (!weight || typeof weight.value !== "number") {
+    return { weight: undefined, weightUnit: undefined };
+  }
+
+  return {
+    weight: weight.value,
+    weightUnit: mapGraphqlWeightUnitToRest(weight.unit),
+  };
+};
+
+const fetchPublishedChannelNames = async (
+  admin: any,
+  productId: string,
+): Promise<string[]> => {
+  const channelsQuery = `#graphql
+    query ProductChannels($id: ID!) {
+      product(id: $id) {
+        resourcePublications(first: 50, onlyPublished: true) {
+          edges {
+            node {
+              isPublished
+              publication {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await admin.graphql(channelsQuery, {
+      variables: { id: productId },
+    });
+    const responseJson = await response.json();
+
+    if (responseJson.errors) {
+      console.log(
+        "Could not fetch source channels (continuing without channel sync):",
+        JSON.stringify(responseJson.errors),
+      );
+      return [];
+    }
+
+    const edges =
+      responseJson?.data?.product?.resourcePublications?.edges ?? [];
+
+    return edges
+      .map((edge: any) => edge?.node)
+      .filter(
+        (node: any) =>
+          node?.isPublished && typeof node?.publication?.name === "string",
+      )
+      .map((node: any) => node.publication.name);
+  } catch (error) {
+    console.log(
+      "Error fetching source channels (continuing without channel sync):",
+      error,
+    );
+    return [];
+  }
+};
+
+type ChannelSyncResult = {
+  status: "synced" | "skipped" | "failed";
+  sourceChannels: number;
+  matchedChannels: number;
+  reason?: string;
+};
+
+const syncProductChannelsInTargetStore = async (
+  shop: string,
+  accessToken: string,
+  targetProductId: string | number,
+  sourceChannelNames: string[],
+) : Promise<ChannelSyncResult> => {
+  if (!Array.isArray(sourceChannelNames) || sourceChannelNames.length === 0) {
+    return {
+      status: "skipped",
+      sourceChannels: 0,
+      matchedChannels: 0,
+      reason: "no_source_channels",
+    };
+  }
+
+  const targetGraphqlEndpoint = `https://${shop}/admin/api/2023-10/graphql.json`;
+  const uniqueSourceChannelNames = Array.from(
+    new Set(sourceChannelNames.map((name) => name.trim()).filter(Boolean)),
+  );
+
+  try {
+    const publicationsRes = await fetch(targetGraphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+      body: JSON.stringify({
+        query: `#graphql
+          query GetTargetPublications {
+            publications(first: 50) {
+              edges {
+                node {
+                  id
+                  name
+                }
+              }
+            }
+          }
+        `,
+      }),
+    });
+
+    if (!publicationsRes.ok) {
+      const errText = await publicationsRes.text();
+      console.log(
+        "Could not load target channels (continuing without channel sync):",
+        errText,
+      );
+      return {
+        status: "failed",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: 0,
+        reason: "target_publications_unavailable",
+      };
+    }
+
+    const publicationsJson = await publicationsRes.json();
+    if (
+      Array.isArray(publicationsJson?.errors) &&
+      publicationsJson.errors.length > 0
+    ) {
+      console.log(
+        "Target channel query returned GraphQL errors:",
+        JSON.stringify(publicationsJson.errors),
+      );
+      return {
+        status: "failed",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: 0,
+        reason: "target_publications_query_error",
+      };
+    }
+
+    const targetPublicationNodes =
+      publicationsJson?.data?.publications?.edges?.map((edge: any) => edge.node) ??
+      [];
+    const targetPublicationsByName = new Map<string, string>();
+
+    for (const publication of targetPublicationNodes) {
+      if (publication?.id && typeof publication?.name === "string") {
+        targetPublicationsByName.set(
+          publication.name.trim().toLowerCase(),
+          publication.id,
+        );
+      }
+    }
+
+    const publicationIds = uniqueSourceChannelNames
+      .map((name) => targetPublicationsByName.get(name.toLowerCase()))
+      .filter((publicationId): publicationId is string => Boolean(publicationId));
+
+    if (publicationIds.length === 0) {
+      console.log(
+        "No matching target channels found by name; skipping channel sync",
+      );
+      return {
+        status: "skipped",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: 0,
+        reason: "no_matching_target_channels",
+      };
+    }
+
+    const publishRes = await fetch(targetGraphqlEndpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+      body: JSON.stringify({
+        query: `#graphql
+          mutation PublishProductToChannels($id: ID!, $input: [PublicationInput!]!) {
+            publishablePublish(id: $id, input: $input) {
+              userErrors {
+                field
+                message
+              }
+            }
+          }
+        `,
+        variables: {
+          id: `gid://shopify/Product/${targetProductId}`,
+          input: publicationIds.map((publicationId) => ({ publicationId })),
+        },
+      }),
+    });
+
+    if (!publishRes.ok) {
+      const errText = await publishRes.text();
+      console.log(
+        "Failed to publish product to matched target channels:",
+        errText,
+      );
+      return {
+        status: "failed",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: publicationIds.length,
+        reason: "publish_request_failed",
+      };
+    }
+
+    const publishJson = await publishRes.json();
+    if (Array.isArray(publishJson?.errors) && publishJson.errors.length > 0) {
+      console.log(
+        "Channel publish mutation returned GraphQL errors:",
+        JSON.stringify(publishJson.errors),
+      );
+      return {
+        status: "failed",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: publicationIds.length,
+        reason: "publish_graphql_error",
+      };
+    }
+
+    const userErrors = publishJson?.data?.publishablePublish?.userErrors;
+    if (Array.isArray(userErrors) && userErrors.length > 0) {
+      console.log(
+        "Channel publish mutation returned user errors:",
+        JSON.stringify(userErrors),
+      );
+      return {
+        status: "failed",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: publicationIds.length,
+        reason: "publish_user_error",
+      };
+    } else {
+      console.log(
+        `Successfully synced ${publicationIds.length} publication channel(s)`,
+      );
+      return {
+        status: "synced",
+        sourceChannels: uniqueSourceChannelNames.length,
+        matchedChannels: publicationIds.length,
+      };
+    }
+  } catch (error) {
+    console.log(
+      "Error syncing channels to target store (continuing without channel sync):",
+      error,
+    );
+    return {
+      status: "failed",
+      sourceChannels: uniqueSourceChannelNames.length,
+      matchedChannels: 0,
+      reason: "channel_sync_exception",
+    };
+  }
+};
+
 export const exportProductToStore = async (
   product: any,
   toStoreId: string,
@@ -249,6 +568,10 @@ export const exportProductToStore = async (
   console.log(
     "Detailed product data:",
     JSON.stringify(detailedProduct, null, 2),
+  );
+  const sourceChannelNames = await fetchPublishedChannelNames(
+    admin,
+    detailedProduct.id,
   );
 
   // 1. Fetch the target store's access token and shop domain
@@ -432,19 +755,31 @@ export const exportProductToStore = async (
   ) {
     console.log(`Processing ${detailedProduct.variants.edges.length} variants`);
 
-    // Collect all unique option names from variants
-    const allOptionNames = new Set<string>();
-    detailedProduct.variants.edges.forEach((v: any) => {
-      const variant = v.node;
-      if (variant.selectedOptions) {
-        variant.selectedOptions.forEach((opt: any) => {
-          allOptionNames.add(opt.name);
-        });
-      }
-    });
+    const productOptions = Array.isArray(detailedProduct.options)
+      ? detailedProduct.options
+          .filter((opt: any) => typeof opt?.name === "string")
+          .sort((a: any, b: any) => {
+            const aPos = typeof a?.position === "number" ? a.position : 0;
+            const bPos = typeof b?.position === "number" ? b.position : 0;
+            return aPos - bPos;
+          })
+          .map((opt: any) => opt.name)
+      : [];
 
-    // Convert to array and sort for consistent ordering
-    const optionNamesArray = Array.from(allOptionNames).sort();
+    const optionNamesArray =
+      productOptions.length > 0
+        ? productOptions
+        : Array.from(
+            new Set(
+              detailedProduct.variants.edges.flatMap((v: any) =>
+                Array.isArray(v?.node?.selectedOptions)
+                  ? v.node.selectedOptions
+                      .map((opt: any) => opt?.name)
+                      .filter((name: any) => typeof name === "string")
+                  : [],
+              ),
+            ),
+          );
 
     // Set the product options - REST API expects array of objects with 'name' property
     productPayload.product.options = optionNamesArray.map((name) => ({
@@ -478,9 +813,11 @@ export const exportProductToStore = async (
         // Always use product title as fallback for variant title
         const variantTitle = variant.title || productTitle;
         // If all option values are null, use product title for option1 to avoid "(default name)"
-        const defaultOption1 = (option1 === null && option2 === null && option3 === null)
-          ? productTitle
-          : option1;
+        const defaultOption1 =
+          option1 === null && option2 === null && option3 === null
+            ? productTitle
+            : option1;
+        const { weight, weightUnit } = getVariantWeight(variant);
 
         return {
           title: variantTitle,
@@ -489,6 +826,8 @@ export const exportProductToStore = async (
           sku: variant.sku || "",
           barcode: variant.barcode || "",
           inventory_quantity: variant.inventoryQuantity || 0,
+          ...(typeof weight === "number" ? { weight } : {}),
+          ...(weightUnit ? { weight_unit: weightUnit } : {}),
           option1: defaultOption1,
           option2: option2,
           option3: option3,
@@ -554,6 +893,12 @@ export const exportProductToStore = async (
 
   let resultProduct;
   let isUpdate = false;
+  let channelSync: ChannelSyncResult = {
+    status: "skipped",
+    sourceChannels: sourceChannelNames.length,
+    matchedChannels: 0,
+    reason: "status_not_active",
+  };
 
   if (existingProduct) {
     // 4a. Update existing product
@@ -610,6 +955,15 @@ export const exportProductToStore = async (
 
     resultProduct = (await createRes.json()).product;
     console.log("Successfully created product:", resultProduct.id);
+  }
+
+  if (normalizedStatus === "active") {
+    channelSync = await syncProductChannelsInTargetStore(
+      shop,
+      accessToken,
+      resultProduct.id,
+      sourceChannelNames,
+    );
   }
 
   // 5. Create metafields if present
@@ -696,5 +1050,6 @@ export const exportProductToStore = async (
     message: isUpdate
       ? "Product updated successfully"
       : "Product created successfully",
+    channelSync,
   };
 };

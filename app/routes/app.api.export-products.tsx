@@ -36,6 +36,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const results = [];
     const errors = [];
+    const channelSync = {
+      synced: 0,
+      skipped: 0,
+      failed: 0,
+    };
 
     // Export each product sequentially
     for (const product of products) {
@@ -52,6 +57,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           success: true,
           result,
         });
+        if (result?.channelSync?.status === "synced") {
+          channelSync.synced += 1;
+        } else if (result?.channelSync?.status === "failed") {
+          channelSync.failed += 1;
+        } else {
+          channelSync.skipped += 1;
+        }
       } catch (error: any) {
         errors.push({
           productId: product.id,
@@ -66,6 +78,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         success: errors.length === 0,
         results,
         errors,
+        channelSync,
         summary: {
           total: products.length,
           successful: results.length,

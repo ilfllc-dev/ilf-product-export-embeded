@@ -18,6 +18,9 @@ export interface LoaderData {
         vendor: string;
         productType: string;
         tags: string[];
+        availablePublicationsCount?: {
+          count: number;
+        };
         images: {
           edges: Array<{
             node: {

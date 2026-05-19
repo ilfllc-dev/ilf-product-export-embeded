@@ -221,12 +221,90 @@ export default function ProductList() {
       vendor: node.vendor,
       productType: node.productType,
       imageUrl: node.images?.edges?.[0]?.node.url,
+      channels: node.availablePublicationsCount?.count ?? 0,
     })) || [];
 
   const hasProducts = products?.edges?.length > 0;
   const hasNextPage = products?.pageInfo?.hasNextPage;
   const hasPreviousPage = products?.pageInfo?.hasPreviousPage;
   const endCursor = products?.pageInfo?.endCursor;
+
+  const getStoreLabel = useCallback(
+    (storeId: string) => {
+      const store = stores.find((item) => item.id === storeId);
+      return store?.name || store?.shop || storeId;
+    },
+    [stores],
+  );
+
+  const getChannelSyncReasonLabel = useCallback((reason?: string) => {
+    switch (reason) {
+      case "status_not_active":
+        return "draft status";
+      case "no_source_channels":
+        return "no published source channels";
+      case "no_matching_target_channels":
+        return "no matching target channels";
+      case "target_publications_unavailable":
+        return "target channels unavailable";
+      case "target_publications_query_error":
+        return "target channel query failed";
+      case "publish_request_failed":
+      case "publish_graphql_error":
+      case "publish_user_error":
+        return "publish failed";
+      case "channel_sync_exception":
+        return "runtime error";
+      default:
+        return "unknown reason";
+    }
+  }, []);
+
+  const formatStoreChannelSyncForToast = useCallback(
+    (storeId: string, channelSync: any) => {
+      if (!channelSync || typeof channelSync !== "object") {
+        return null;
+      }
+
+      const storeLabel = getStoreLabel(storeId);
+      const sourceChannels =
+        typeof channelSync.sourceChannels === "number"
+          ? channelSync.sourceChannels
+          : 0;
+      const matchedChannels =
+        typeof channelSync.matchedChannels === "number"
+          ? channelSync.matchedChannels
+          : 0;
+      const reasonLabel = getChannelSyncReasonLabel(channelSync.reason);
+
+      if (channelSync.status === "synced") {
+        return `${storeLabel}: synced ${matchedChannels}/${sourceChannels}`;
+      }
+
+      if (channelSync.status === "failed") {
+        return `${storeLabel}: failed (${reasonLabel})`;
+      }
+
+      return `${storeLabel}: skipped (${reasonLabel})`;
+    },
+    [getChannelSyncReasonLabel, getStoreLabel],
+  );
+
+  const formatBulkChannelSyncForToast = useCallback(
+    (storeId: string, channelSync: any) => {
+      if (!channelSync || typeof channelSync !== "object") {
+        return null;
+      }
+
+      const storeLabel = getStoreLabel(storeId);
+      const synced = typeof channelSync.synced === "number" ? channelSync.synced : 0;
+      const skipped =
+        typeof channelSync.skipped === "number" ? channelSync.skipped : 0;
+      const failed = typeof channelSync.failed === "number" ? channelSync.failed : 0;
+      return `${storeLabel}: ${synced} synced, ${skipped} skipped, ${failed} failed`;
+    },
+    [getStoreLabel],
+  );
 
   // Export product handler - now supports multiple stores
   const onExportProduct = async (
@@ -293,11 +371,20 @@ export default function ProductList() {
     const successCount = results.length;
     const failCount = errors.length;
     const totalCount = toStores.length;
+    const channelSyncDetails = results
+      .map((item: any) =>
+        formatStoreChannelSyncForToast(item.storeId, item.result?.channelSync),
+      )
+      .filter(Boolean);
+    const channelSyncMessage =
+      channelSyncDetails.length > 0
+        ? ` | Channels: ${channelSyncDetails.join("; ")}`
+        : "";
 
     if (failCount === 0) {
       return {
         success: true,
-        message: `Product exported successfully to ${successCount} store${successCount !== 1 ? "s" : ""}`,
+        message: `Product exported successfully to ${successCount} store${successCount !== 1 ? "s" : ""}${channelSyncMessage}`,
         results,
         errors: [],
       };
@@ -308,7 +395,7 @@ export default function ProductList() {
     } else {
       return {
         success: true,
-        message: `Product exported to ${successCount} of ${totalCount} store${totalCount !== 1 ? "s" : ""}`,
+        message: `Product exported to ${successCount} of ${totalCount} store${totalCount !== 1 ? "s" : ""}${channelSyncMessage}`,
         results,
         errors,
       };
@@ -416,10 +503,20 @@ export default function ProductList() {
 
     // Return summary
     const successfulExports = completedExports - failedExports;
+    const bulkChannelDetails = results
+      .map((item: any) =>
+        formatBulkChannelSyncForToast(item.storeId, item.result?.channelSync),
+      )
+      .filter(Boolean);
+    const bulkChannelMessage =
+      bulkChannelDetails.length > 0
+        ? ` | Channels: ${bulkChannelDetails.join("; ")}`
+        : "";
+
     if (failedExports === 0) {
       return {
         success: true,
-        message: `Successfully exported ${productsToExport.length} product${productsToExport.length !== 1 ? "s" : ""} to ${toStores.length} store${toStores.length !== 1 ? "s" : ""}`,
+        message: `Successfully exported ${productsToExport.length} product${productsToExport.length !== 1 ? "s" : ""} to ${toStores.length} store${toStores.length !== 1 ? "s" : ""}${bulkChannelMessage}`,
         results,
         errors: [],
         summary: {
@@ -437,7 +534,7 @@ export default function ProductList() {
     } else {
       return {
         success: true,
-        message: `Exported ${productsToExport.length} product${productsToExport.length !== 1 ? "s" : ""} to ${toStores.length} store${toStores.length !== 1 ? "s" : ""} (${successfulExports} successful, ${failedExports} failed)`,
+        message: `Exported ${productsToExport.length} product${productsToExport.length !== 1 ? "s" : ""} to ${toStores.length} store${toStores.length !== 1 ? "s" : ""} (${successfulExports} successful, ${failedExports} failed)${bulkChannelMessage}`,
         results,
         errors,
         summary: {
