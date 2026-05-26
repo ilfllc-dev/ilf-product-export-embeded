@@ -68,7 +68,53 @@ export const fetchShopifyProducts = async (
   admin: any,
   variables: { first: number; after: string | null; query: string | null },
 ): Promise<any> => {
-  const query = `#graphql
+  const baseQuery = `#graphql
+    query getProducts($first: Int!, $after: String, $query: String) {
+      products(first: $first, after: $after, query: $query) {
+        pageInfo {
+          hasNextPage
+          hasPreviousPage
+          startCursor
+          endCursor
+        }
+        edges {
+          node {
+            id
+            title
+            handle
+            status
+            createdAt
+            updatedAt
+            totalInventory
+            vendor
+            productType
+            tags
+            bodyHtml
+            images(first: 1) {
+              edges {
+                node {
+                  id
+                  url
+                  altText
+                }
+              }
+            }
+            variants(first: 1) {
+              edges {
+                node {
+                  id
+                  price
+                  compareAtPrice
+                  inventoryQuantity
+                }
+              }
+            }
+          }
+        }
+      }
+    }`;
+
+  const channelAwareQuery = `#graphql
     query getProducts($first: Int!, $after: String, $query: String) {
       products(first: $first, after: $after, query: $query) {
         pageInfo {
@@ -116,50 +162,53 @@ export const fetchShopifyProducts = async (
         }
       }
     }`;
+
+  const runProductsQuery = async (query: string, label: string) => {
+    try {
+      const response = await admin.graphql(query, { variables });
+      return await response.json();
+    } catch (error) {
+      console.error(`Error executing ${label} product query:`, error);
+      return null;
+    }
+  };
+
   try {
-    const response = await admin.graphql(query, { variables });
-    const responseJson = await response.json();
+    // Best-effort: try to fetch channel counts, but never fail product loading if unsupported.
+    const channelAwareResult = await runProductsQuery(
+      channelAwareQuery,
+      "channel-aware",
+    );
+    if (channelAwareResult?.data?.products) {
+      return channelAwareResult.data.products;
+    }
 
-    console.log("GraphQL response:", JSON.stringify(responseJson, null, 2));
-
-    if (responseJson.errors) {
-      const channelFieldError = responseJson.errors.some(
-        (error: any) =>
-          typeof error?.message === "string" &&
-          error.message.includes("availablePublicationsCount"),
+    if (channelAwareResult?.errors) {
+      console.log(
+        "Channel-aware product query returned errors; falling back to base query",
+        JSON.stringify(channelAwareResult.errors),
       );
+    }
 
-      if (channelFieldError) {
-        console.log(
-          "availablePublicationsCount not supported on this API version; retrying product query without channel count",
-        );
-        const fallbackQuery = query.replace(
-          /\s*availablePublicationsCount\s*\{\s*count\s*\}\s*/g,
-          "\n",
-        );
+    const fallbackResult = await runProductsQuery(baseQuery, "fallback");
+    if (fallbackResult?.data?.products) {
+      return fallbackResult.data.products;
+    }
 
-        const fallbackResponse = await admin.graphql(fallbackQuery, {
-          variables,
-        });
-        const fallbackJson = await fallbackResponse.json();
-        if (!fallbackJson.errors && fallbackJson?.data?.products) {
-          return fallbackJson.data.products;
-        }
-      }
-
+    if (fallbackResult?.errors) {
       console.error(
-        "GraphQL errors:",
-        JSON.stringify(responseJson.errors, null, 2),
+        "Fallback product query returned errors:",
+        JSON.stringify(fallbackResult.errors, null, 2),
       );
       return null;
     }
 
-    if (!responseJson.data || !responseJson.data.products) {
-      console.error("Invalid GraphQL response structure:", responseJson);
+    if (!fallbackResult?.data?.products) {
+      console.error("Invalid GraphQL response structure:", fallbackResult);
       return null;
     }
 
-    return responseJson.data.products;
+    return fallbackResult.data.products;
   } catch (error) {
     console.error("Error fetching products from Shopify:", error);
     return null;
