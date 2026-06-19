@@ -17,12 +17,10 @@ interface Store {
 
 interface TargetStoresListProps {
   stores: Store[];
-  onAddStore: () => void;
 }
 
 export const TargetStoresList: React.FC<TargetStoresListProps> = ({
   stores,
-  onAddStore,
 }) => (
   <Card>
     <BlockStack gap="400">
@@ -34,7 +32,7 @@ export const TargetStoresList: React.FC<TargetStoresListProps> = ({
           <Text as="span" variant="bodyMd" tone="subdued">
             {stores.length} stores
           </Text>
-          <Button variant="primary" onClick={onAddStore}>
+          <Button variant="primary" url="/app/dashboard">
             Add Store
           </Button>
         </InlineStack>
@@ -76,7 +74,7 @@ export const TargetStoresList: React.FC<TargetStoresListProps> = ({
             You haven't added any target stores yet. Add stores to export
             products to them.
           </p>
-          <Button variant="primary" onClick={onAddStore}>
+          <Button variant="primary" url="/app/dashboard">
             Add your first store
           </Button>
         </EmptyState>

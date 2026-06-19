@@ -4,48 +4,23 @@ import {
   AppDistribution,
   shopifyApp,
 } from "@shopify/shopify-app-remix/server";
-import { MemorySessionStorage } from "@shopify/shopify-app-session-storage-memory";
-import { RedisSessionStorage } from "@shopify/shopify-app-session-storage-redis";
-
-// Choose session storage based on environment
-let sessionStorage;
-
-if (process.env.NODE_ENV === "production") {
-  // Use Redis for production - persistent across restarts and instances
-  const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
-
-  if (process.env.REDIS_URL) {
-    try {
-      sessionStorage = new RedisSessionStorage(redisUrl);
-    } catch (error) {
-      console.log(
-        "Failed to initialize Redis, falling back to MemorySessionStorage",
-      );
-      sessionStorage = new MemorySessionStorage();
-    }
-  } else {
-    console.log("REDIS_URL not set, using MemorySessionStorage");
-    sessionStorage = new MemorySessionStorage();
-  }
-} else {
-  sessionStorage = new MemorySessionStorage();
-}
+import { PrismaSessionStorage } from "./prisma-session-storage.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.January25,
-  scopes: ["read_products", "write_products"],
+  scopes: ["read_products", "read_inventory", "read_publications", "read_locations"],
   appUrl: process.env.SHOPIFY_APP_URL || "",
   distribution: AppDistribution.AppStore,
-  sessionStorage,
+  sessionStorage: new PrismaSessionStorage(),
   cookieOptions: {
-    sameSite: "none", // Required for embedded apps
-    secure: true, // Required for embedded apps
+    sameSite: "none",
+    secure: true,
     httpOnly: true,
   },
   future: {
-    unstable_newEmbeddedAuthStrategy: true, // Enable OAuth token exchange
+    unstable_newEmbeddedAuthStrategy: true,
     removeRest: true,
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN

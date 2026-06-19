@@ -1,16 +1,15 @@
-client_id = "d99f8bbe7d0eb2cf598b442bd7b83b38"
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-name = "product-export-production"
-handle = "product-export-prod"
+client_id = "fe5c072c330e1f66b3cb33d90b0aa0c2"
+name = "Product-export-app"
 application_url = "https://jellyfish-app-3qksh.ondigitalocean.app"
 embedded = true
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true
 
 [webhooks]
-api_version = "2025-04"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
@@ -21,15 +20,14 @@ api_version = "2025-04"
   uri = "/webhooks/app/scopes_update"
 
 [access_scopes]
-scopes = "read_products,write_products"
+scopes = "read_products,read_inventory,read_publications,read_locations"
 
 [auth]
 redirect_urls = [
   "https://jellyfish-app-3qksh.ondigitalocean.app/auth/callback",
-  "https://jellyfish-app-3qksh.ondigitalocean.app/api/auth/callback",
-  "https://jellyfish-app-3qksh.ondigitalocean.app/auth/shopify/callback"
+  "https://jellyfish-app-3qksh.ondigitalocean.app/auth/shopify/callback",
+  "https://ilf-oauth-middleware-vn4rm.ondigitalocean.app/auth/shopify/callback"
 ]
+
 [pos]
 embedded = false
-
-

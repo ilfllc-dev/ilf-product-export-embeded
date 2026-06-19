@@ -22,44 +22,32 @@ export const fetchTargetStores = async (): Promise<
     createdAt: Date;
   }>
 > => {
-  const storeOnboardUrl =
-    process.env.SHOPIFY_STORE_ONBOARD_URL || "http://localhost:5174";
+  const middlewareUrl = process.env.SHOPIFY_STORE_ONBOARD_URL || "";
+  const apiKey = process.env.SHOPIFY_STORE_ONBOARD_API_KEY || "";
 
   try {
-    console.log(
-      `Attempting to fetch stores from: ${storeOnboardUrl}/api/stores`,
-    );
+    const response = await fetch(`${middlewareUrl}/stores`, {
+      headers: { "X-API-Key": apiKey },
+    });
 
-    const response = await fetch(`${storeOnboardUrl}/api/stores`);
-
-    if (response.ok) {
-      const data = await response.json();
-      console.log(`Successfully fetched ${data.stores?.length || 0} stores`);
-      return (
-        data.stores?.map((store: any) => ({
-          id: store.id,
-          shop: store.shop,
-          name: store.name,
-          createdAt: new Date(store.createdAt),
-        })) || []
-      );
-    } else {
-      console.error(
-        `Failed to fetch stores: ${response.status} ${response.statusText}`,
-      );
-      if (response.status === 404) {
-        console.error(
-          "Store-onboard app API endpoint not found. Make sure the store-onboard app is running.",
-        );
-      }
+    if (!response.ok) {
+      console.error(`Failed to fetch stores from middleware: ${response.status}`);
       return [];
     }
+
+    const data = await response.json();
+    console.log(`Fetched ${data.stores?.length || 0} target stores from middleware`);
+
+    return (data.stores || [])
+      .filter((s: any) => s.is_active && s.has_token)
+      .map((s: any) => ({
+        id: s.store_name,
+        shop: s.shop_domain,
+        name: s.store_name,
+        createdAt: new Date(s.connected_at),
+      }));
   } catch (error) {
-    console.error("Error fetching stores from shopify-store-onboard:", error);
-    console.error(
-      "Make sure the store-onboard app is running at:",
-      storeOnboardUrl,
-    );
+    console.error("Error fetching target stores from middleware:", error);
     return [];
   }
 };
@@ -623,17 +611,26 @@ export const exportProductToStore = async (
     detailedProduct.id,
   );
 
-  // 1. Fetch the target store's access token and shop domain
-  const storeOnboardUrl =
-    process.env.SHOPIFY_STORE_ONBOARD_URL || "http://localhost:5174";
-  const storesRes = await fetch(`${storeOnboardUrl}/api/stores`);
-  if (!storesRes.ok) throw new Error("Failed to fetch target stores");
-  const storesData = await storesRes.json();
-  const targetStore = storesData.stores.find((s: any) => s.id === toStoreId);
-  if (!targetStore) throw new Error("Target store not found");
-  const { accessToken, shop } = targetStore;
+  // 1. Fetch the target store's access token from the ILF OAuth Middleware
+  const middlewareUrl = process.env.SHOPIFY_STORE_ONBOARD_URL || "";
+  const apiKey = process.env.SHOPIFY_STORE_ONBOARD_API_KEY || "";
+
+  const tokenRes = await fetch(`${middlewareUrl}/token/${toStoreId}`, {
+    headers: { "X-API-Key": apiKey },
+  });
+
+  if (!tokenRes.ok) {
+    throw new Error(
+      `Failed to fetch token for store '${toStoreId}' from middleware: ${tokenRes.status}`
+    );
+  }
+
+  const tokenData = await tokenRes.json();
+  const accessToken: string = tokenData.access_token;
+  const shop: string = tokenData.shop_domain;
+
   if (!accessToken || !shop)
-    throw new Error("Missing access token or shop domain for target store");
+    throw new Error("Missing access token or shop domain from middleware");
 
   console.log("Found target store:", shop);
 
@@ -745,7 +742,7 @@ export const exportProductToStore = async (
               existingProduct = p;
               console.log(
                 "Found existing product by original ID:",
-                existingProduct.id,
+                existingProduct!.id,
               );
               break;
             }
@@ -831,7 +828,7 @@ export const exportProductToStore = async (
           );
 
     // Set the product options - REST API expects array of objects with 'name' property
-    productPayload.product.options = optionNamesArray.map((name) => ({
+    productPayload.product.options = optionNamesArray.map((name: string) => ({
       name,
     }));
 
@@ -923,7 +920,7 @@ export const exportProductToStore = async (
         // Add a unique suffix to all variant titles to avoid conflicts
         const timestamp = Date.now();
         productPayload.product.variants = productPayload.product.variants.map(
-          (variant: any, index: number) => ({
+          (variant: any, _index: number) => ({
             ...variant,
             title: `${variant.title} (${timestamp})`,
             // Also update option1 to match the new title

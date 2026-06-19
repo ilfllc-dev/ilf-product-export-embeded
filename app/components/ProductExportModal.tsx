@@ -65,11 +65,6 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
 
   if (!product) return null;
 
-  // Debug logging
-  console.log("ProductExportModal - product:", product);
-  console.log("ProductExportModal - product.title:", product.title);
-  console.log("ProductExportModal - product.id:", product.id);
-
   const selectedStoreObjects = stores.filter((store) =>
     selectedStores.includes(store.id),
   );

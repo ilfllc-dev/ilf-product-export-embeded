@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
 import {
-  Card,
   IndexTable,
   TextField,
   Avatar,
@@ -9,10 +8,9 @@ import {
   Badge,
   Icon,
   InlineStack,
+  Box,
   Popover,
   ActionList,
-  Box,
-  ButtonGroup,
 } from "@shopify/polaris";
 import { SearchIcon, FilterIcon } from "@shopify/polaris-icons";
 
@@ -44,14 +42,17 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
   onBulkExport,
 }) => {
   const [search, setSearch] = useState("");
-  const [popoverActive, setPopoverActive] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [filterPopoverActive, setFilterPopoverActive] = useState(false);
 
   const filteredProducts = useMemo(
     () =>
-      products.filter((product) =>
-        product.title.toLowerCase().includes(search.toLowerCase()),
-      ),
-    [products, search],
+      products.filter((product) => {
+        const matchesSearch = product.title.toLowerCase().includes(search.toLowerCase());
+        const matchesStatus = statusFilter === null || product.status.toLowerCase() === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [products, search, statusFilter],
   );
 
   // FIX: Track visible IDs so selection persists across searches.
@@ -72,7 +73,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
 
   const resourceName = { singular: "product", plural: "products" };
   const handleSelectionChange = useCallback(
-    (selectionType: any, isSelecting: boolean, selection: string | string[]) => {
+    (selectionType: any, isSelecting: boolean, selection?: string | string[] | [number, number]) => {
       if (!onSelectionChange) {
         return;
       }
@@ -105,7 +106,7 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
         }
       } else if (Array.isArray(selection)) {
         removeVisible();
-        selection.forEach((id) => nextSelected.add(id));
+        selection.forEach((id) => nextSelected.add(String(id)));
       } else if (typeof selection === "string") {
         if (isSelecting) {
           nextSelected.add(selection);
@@ -119,59 +120,72 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
     [onSelectionChange, selectedProductIds, visibleProductIds],
   );
 
-  // Filter popover (placeholder for future filter logic)
-  const filterPopover = (
-    <Popover
-      active={popoverActive}
-      activator={
-        <Button
-          icon={FilterIcon}
-          onClick={() => setPopoverActive((a) => !a)}
-          accessibilityLabel="Filter"
-        />
-      }
-      onClose={() => setPopoverActive(false)}
-    >
-      <ActionList
-        items={[
-          { content: "Active", onAction: () => {} },
-          { content: "Draft", onAction: () => {} },
-          { content: "Archived", onAction: () => {} },
-        ]}
-      />
-    </Popover>
-  );
-
   return (
-    <Card>
+    <>
       <Box paddingBlockEnd="400">
-        <InlineStack gap="400" align="space-between">
-          <ButtonGroup>
-            <TextField
-              label="Search products"
-              labelHidden
-              value={search}
-              onChange={setSearch}
-              autoComplete="off"
-              placeholder="Search by title, vendor, or type..."
-              prefix={<Icon source={SearchIcon} tone="base" />}
-              disabled={loading}
-              clearButton
-              onClearButtonClick={() => setSearch("")}
-            />
-            {filterPopover}
-          </ButtonGroup>
-          <InlineStack gap="200" align="center">
-            <Text as="span" variant="bodySm">
-              {filteredProducts.length} product
-              {filteredProducts.length !== 1 ? "s" : ""}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ flex: 1, display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ flex: 1 }}>
+              <TextField
+                label="Search products"
+                labelHidden
+                value={search}
+                onChange={setSearch}
+                autoComplete="off"
+                placeholder="Search by title, vendor, or type..."
+                prefix={<Icon source={SearchIcon} tone="base" />}
+                disabled={loading}
+                clearButton
+                onClearButtonClick={() => setSearch("")}
+              />
+            </div>
+            <Popover
+              active={filterPopoverActive}
+              activator={
+                <Button
+                  icon={FilterIcon}
+                  onClick={() => setFilterPopoverActive((v) => !v)}
+                  accessibilityLabel="Filter by status"
+                  pressed={statusFilter !== null}
+                />
+              }
+              onClose={() => setFilterPopoverActive(false)}
+            >
+              <ActionList
+                items={[
+                  {
+                    content: "All",
+                    onAction: () => { setStatusFilter(null); setFilterPopoverActive(false); },
+                    active: statusFilter === null,
+                  },
+                  {
+                    content: "Active",
+                    onAction: () => { setStatusFilter("active"); setFilterPopoverActive(false); },
+                    active: statusFilter === "active",
+                  },
+                  {
+                    content: "Draft",
+                    onAction: () => { setStatusFilter("draft"); setFilterPopoverActive(false); },
+                    active: statusFilter === "draft",
+                  },
+                  {
+                    content: "Archived",
+                    onAction: () => { setStatusFilter("archived"); setFilterPopoverActive(false); },
+                    active: statusFilter === "archived",
+                  },
+                ]}
+              />
+            </Popover>
+          </div>
+          <InlineStack gap="300" align="center" blockAlign="center">
+            <Text as="span" variant="bodySm" tone="subdued">
+              {filteredProducts.length} product{filteredProducts.length !== 1 ? "s" : ""}
             </Text>
             <Button
               variant="primary"
               disabled={selectedProductIds.length === 0}
               onClick={() => {
                 if (selectedProductIds.length === 1) {
-                  // FIX: Use the global selection when a search filter is active.
                   const selectedProduct = products.find(
                     (p) => p.id === selectedProductIds[0],
                   );
@@ -179,18 +193,14 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
                     onProductClick(selectedProduct);
                   }
                 } else if (onBulkExport) {
-                  // If multiple products are selected, use bulk export
                   onBulkExport(selectedProductIds);
                 }
               }}
             >
-              Export selected
-              {selectedProductIds.length > 0
-                ? ` (${selectedProductIds.length})`
-                : ""}
+              Export selected{selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ""}
             </Button>
           </InlineStack>
-        </InlineStack>
+        </div>
       </Box>
       <IndexTable
         resourceName={resourceName}
@@ -254,6 +264,6 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
           </IndexTable.Row>
         ))}
       </IndexTable>
-    </Card>
+    </>
   );
 };

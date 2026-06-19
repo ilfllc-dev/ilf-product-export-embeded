@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import type { LoaderFunctionArgs } from "@remix-run/node";
 import type { LoaderData } from "../types/app._index";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { useLoaderData, useSearchParams } from "@remix-run/react";
 import {
   Page,
@@ -9,7 +9,6 @@ import {
   Card,
   Text,
   Button,
-  TextField,
   InlineStack,
   BlockStack,
   EmptyState,
@@ -41,36 +40,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   let authError = null;
   let shopDomain = null;
 
-  // Extract shop domain from URL parameters
   const requestUrl = new URL(request.url);
   shopDomain = requestUrl.searchParams.get("shop");
 
-  // Check if this is an OAuth callback (has code parameter)
-  const isOAuthCallback = requestUrl.searchParams.has("code");
-
-  if (isOAuthCallback) {
-    return redirect(`/auth/callback?${requestUrl.searchParams.toString()}`);
-  }
-
   try {
-    // For embedded apps, use the authenticate.admin method which handles id_token
     const authResult = await authenticate.admin(request);
     admin = authResult.admin;
     currentStoreName = await getCurrentStoreName(admin);
   } catch (error: any) {
-    // Check if it's a 410 (Gone) error - app uninstalled
     if (error.status === 410 || error.message?.includes("410")) {
-      authError =
-        "App has been uninstalled from this store. Please reinstall the app to continue.";
-    } else if (error.status === 302 || error.message?.includes("302")) {
-      // For embedded apps, if we get a 302, it means we need to redirect to login
-      const loginUrl = `/auth/login?shop=${shopDomain}`;
-      return redirect(loginUrl);
+      authError = "App has been uninstalled from this store. Please reinstall the app to continue.";
     } else {
-      authError = "Authentication failed. Please try again or contact support.";
+      throw error;
     }
-
-    // Continue without admin access - this prevents redirect loops
   }
 
   const url = requestUrl;
@@ -156,6 +138,7 @@ export default function ProductList() {
     shopDomain,
     storeOnboardUrl,
   } = useLoaderData<typeof loader>();
+
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(initialSearch);
 
@@ -195,21 +178,6 @@ export default function ProductList() {
     },
     [searchParams, setSearchParams],
   );
-
-  // Handle key press in search field
-  const handleSearchKeyPress = useCallback(
-    (event: React.KeyboardEvent) => {
-      if (event.key === "Enter") {
-        handleSearch();
-      }
-    },
-    [handleSearch],
-  );
-
-  // Handle Add new store - redirect to shopify-store-onboard app
-  const handleAddStore = useCallback(() => {
-    window.open(storeOnboardUrl, "_blank");
-  }, [storeOnboardUrl]);
 
   // Prepare product list for ResourceList
   const resourceListProducts =
@@ -616,18 +584,6 @@ export default function ProductList() {
                   </Text>
                 </InlineStack>
 
-                {/* Search Bar */}
-                <div style={{ width: "100%" }} onKeyDown={handleSearchKeyPress}>
-                  <TextField
-                    label="Search products"
-                    labelHidden
-                    placeholder="Search by title, vendor, or type..."
-                    value={search}
-                    onChange={handleSearchChange}
-                    autoComplete="off"
-                  />
-                </div>
-
                 {/* Products Resource List */}
                 {hasProducts ? (
                   <ProductResourceList
@@ -689,7 +645,6 @@ export default function ProductList() {
                 ...store,
                 createdAt: new Date(store.createdAt),
               }))}
-              onAddStore={handleAddStore}
             />
           </Layout.Section>
         </Layout>

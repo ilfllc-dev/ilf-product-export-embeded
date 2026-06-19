@@ -8,7 +8,7 @@ export function AppUninstalledBanner({ shop }: AppUninstalledBannerProps) {
   const handleReinstall = () => {
     // Use server-side login route so env config is resolved on the server
     if (shop) {
-      window.location.href = `/auth/login?shop=${encodeURIComponent(shop)}`;
+      window.location.href = `/auth?shop=${encodeURIComponent(shop)}`;
     } else {
       // Fallback to app store
       window.open("https://apps.shopify.com", "_blank");

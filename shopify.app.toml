@@ -1,34 +1,33 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "9c0c19523f0f66c6187e903144af5802"
-name = "product-export"
+client_id = "fe5c072c330e1f66b3cb33d90b0aa0c2"
+name = "Product-export-app"
 application_url = "https://jellyfish-app-3qksh.ondigitalocean.app"
 embedded = true
-handle = "product-export-1"
 
 [build]
 automatically_update_urls_on_dev = true
+include_config_on_deploy = true
 
 [webhooks]
-api_version = "2025-04"
-
-  [[webhooks.subscriptions]]
-  topics = [ "app/scopes_update" ]
-  uri = "/webhooks/app/scopes_update"
+api_version = "2026-07"
 
   [[webhooks.subscriptions]]
   topics = [ "app/uninstalled" ]
   uri = "/webhooks/app/uninstalled"
 
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes_update"
+
 [access_scopes]
-# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_products,write_products"
+scopes = "read_products,read_inventory,read_publications,read_locations"
 
 [auth]
 redirect_urls = [
   "https://jellyfish-app-3qksh.ondigitalocean.app/auth/callback",
-  "https://ilf-product-export-embeded.onrender.com/auth/auth/shopify/callback",
-  "https://ilf-product-export-embeded.onrender.com/api/auth/callback"
+  "https://jellyfish-app-3qksh.ondigitalocean.app/auth/shopify/callback",
+  "https://ilf-oauth-middleware-vn4rm.ondigitalocean.app/auth/shopify/callback"
 ]
 
 [pos]
