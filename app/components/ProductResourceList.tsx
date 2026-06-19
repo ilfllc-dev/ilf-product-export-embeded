@@ -237,14 +237,14 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
             <IndexTable.Cell>
               <Badge
                 tone={
-                  product.status === "Active"
+                  product.status.toUpperCase() === "ACTIVE"
                     ? "success"
-                    : product.status === "Draft"
+                    : product.status.toUpperCase() === "DRAFT"
                       ? "warning"
                       : undefined
                 }
               >
-                {product.status}
+                {product.status.charAt(0).toUpperCase() + product.status.slice(1).toLowerCase()}
               </Badge>
             </IndexTable.Cell>
             <IndexTable.Cell>

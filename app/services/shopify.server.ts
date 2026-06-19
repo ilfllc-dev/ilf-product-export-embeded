@@ -898,44 +898,6 @@ export const exportProductToStore = async (
     ];
   }
 
-  // Check for potential variant title conflicts if creating a new product
-  if (!existingProduct) {
-    const allProductsRes = await fetch(
-      `https://${shop}/admin/api/2023-10/products.json?limit=1`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": accessToken,
-        },
-      },
-    );
-
-    if (allProductsRes.ok) {
-      const allProductsData = await allProductsRes.json();
-      if (allProductsData.products.length > 0) {
-        console.log(
-          "Found existing products in store, checking for conflicts...",
-        );
-        // Add a unique suffix to all variant titles to avoid conflicts
-        const timestamp = Date.now();
-        productPayload.product.variants = productPayload.product.variants.map(
-          (variant: any, _index: number) => ({
-            ...variant,
-            title: `${variant.title} (${timestamp})`,
-            // Also update option1 to match the new title
-            option1: variant.option1
-              ? `${variant.option1} (${timestamp})`
-              : variant.option1,
-          }),
-        );
-
-        console.log(
-          "Added unique timestamps to variant titles to avoid conflicts",
-        );
-      }
-    }
-  }
 
   let resultProduct;
   let isUpdate = false;
@@ -1012,29 +974,46 @@ export const exportProductToStore = async (
     );
   }
 
-  // 5. Create metafields if present
-  if (
-    detailedProduct.metafields &&
-    detailedProduct.metafields.edges &&
-    Array.isArray(detailedProduct.metafields.edges)
-  ) {
-    console.log(
-      `Processing ${detailedProduct.metafields.edges.length} metafields`,
-    );
-    for (const mfEdge of detailedProduct.metafields.edges) {
-      const mf = mfEdge.node;
-      console.log("Processing metafield:", mf.namespace, mf.key);
+  // 5. Upsert metafields — fetch existing ones first so we PUT (update) instead of POST (create) when they already exist
+  const targetMfRes = await fetch(
+    `https://${shop}/admin/api/2023-10/products/${resultProduct.id}/metafields.json`,
+    {
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": accessToken,
+      },
+    },
+  );
+  type ExistingMf = { id: number; namespace: string; key: string };
+  let existingTargetMetafields: ExistingMf[] = [];
+  if (targetMfRes.ok) {
+    const targetMfData = await targetMfRes.json();
+    existingTargetMetafields = targetMfData.metafields || [];
+  }
 
-      const metafieldPayload = {
-        metafield: {
-          namespace: mf.namespace,
-          key: mf.key,
-          value: mf.value,
-          type: mf.type || "single_line_text_field",
-          description: mf.description || "",
+  const upsertMetafield = async (namespace: string, key: string, value: string, type: string, description?: string) => {
+    const existing = existingTargetMetafields.find(
+      (m) => m.namespace === namespace && m.key === key,
+    );
+    if (existing) {
+      const putRes = await fetch(
+        `https://${shop}/admin/api/2023-10/metafields/${existing.id}.json`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": accessToken,
+          },
+          body: JSON.stringify({ metafield: { id: existing.id, value, type } }),
         },
-      };
-      const mfRes = await fetch(
+      );
+      if (!putRes.ok) {
+        console.error(`Failed to update metafield ${namespace}.${key}:`, await putRes.text());
+      } else {
+        console.log(`Updated metafield: ${namespace}.${key}`);
+      }
+    } else {
+      const postRes = await fetch(
         `https://${shop}/admin/api/2023-10/products/${resultProduct.id}/metafields.json`,
         {
           method: "POST",
@@ -1042,51 +1021,41 @@ export const exportProductToStore = async (
             "Content-Type": "application/json",
             "X-Shopify-Access-Token": accessToken,
           },
-          body: JSON.stringify(metafieldPayload),
+          body: JSON.stringify({
+            metafield: { namespace, key, value, type: type || "single_line_text_field", description: description || "" },
+          }),
         },
       );
-      if (!mfRes.ok) {
-        const mfErr = await mfRes.text();
-        console.error("Failed to create metafield:", mfErr);
-        // Don't throw error for metafield failures, just log them
+      if (!postRes.ok) {
+        console.error(`Failed to create metafield ${namespace}.${key}:`, await postRes.text());
       } else {
-        console.log("Successfully created metafield:", mf.namespace, mf.key);
+        console.log(`Created metafield: ${namespace}.${key}`);
       }
+    }
+  };
+
+  if (
+    detailedProduct.metafields &&
+    detailedProduct.metafields.edges &&
+    Array.isArray(detailedProduct.metafields.edges)
+  ) {
+    console.log(`Processing ${detailedProduct.metafields.edges.length} metafields`);
+    for (const mfEdge of detailedProduct.metafields.edges) {
+      const mf = mfEdge.node;
+      await upsertMetafield(mf.namespace, mf.key, mf.value, mf.type, mf.description);
     }
   } else {
     console.log("No metafields found to export");
   }
 
-  // 6. Always create a metafield to store the original product ID for future updates
-  const originalIdMetafieldPayload = {
-    metafield: {
-      namespace: "product_export",
-      key: "original_product_id",
-      value: detailedProduct.id,
-      type: "single_line_text_field",
-      description: "Original product ID from source store",
-    },
-  };
-
-  const originalIdRes = await fetch(
-    `https://${shop}/admin/api/2023-10/products/${resultProduct.id}/metafields.json`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": accessToken,
-      },
-      body: JSON.stringify(originalIdMetafieldPayload),
-    },
+  // 6. Upsert the tracking metafield that stores the original product ID
+  await upsertMetafield(
+    "product_export",
+    "original_product_id",
+    detailedProduct.id,
+    "single_line_text_field",
+    "Original product ID from source store",
   );
-
-  if (!originalIdRes.ok) {
-    const mfErr = await originalIdRes.text();
-    console.error("Failed to create original ID metafield:", mfErr);
-    // Don't throw error for metafield failures, just log them
-  } else {
-    console.log("Successfully created original ID metafield");
-  }
 
   // 7. Done
   return {

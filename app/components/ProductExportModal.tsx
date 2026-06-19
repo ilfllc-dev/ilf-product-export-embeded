@@ -134,9 +134,11 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 shopify.toast.show(message, { duration: 5000 });
               }
               onClose();
-            } catch (e) {
+            } catch (e: any) {
               setIsExporting(false);
-              // Optionally show error feedback here
+              if (typeof shopify !== "undefined" && shopify.toast?.show) {
+                shopify.toast.show(e?.message || "Export failed", { duration: 5000, isError: true });
+              }
             }
           },
           loading: isExporting,
