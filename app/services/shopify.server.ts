@@ -52,6 +52,123 @@ export const fetchTargetStores = async (): Promise<
   }
 };
 
+export const checkProductsExistInStores = async (
+  sourceProducts: { id: string; title: string }[],
+  storeIds: string[],
+): Promise<{ [storeId: string]: string[] }> => {
+  const middlewareUrl = process.env.SHOPIFY_STORE_ONBOARD_URL || "";
+  const apiKey = process.env.SHOPIFY_STORE_ONBOARD_API_KEY || "";
+
+  const metafieldSearchQuery = `#graphql
+    query FindProductByOriginalId($query: String!) {
+      products(first: 1, query: $query) {
+        edges { node { id } }
+      }
+    }
+  `;
+
+  // Mirror the same two-step lookup used by exportProductToStore:
+  // 1. Try metafield GraphQL filter (works if metafield definitions are indexed).
+  // 2. Fall back to title search + per-product metafield REST check.
+  const checkOneProduct = async (
+    shop: string,
+    accessToken: string,
+    productId: string,
+    productTitle: string,
+  ): Promise<boolean> => {
+    // Step 1: metafield filter search
+    try {
+      const res = await fetch(`https://${shop}/admin/api/2023-10/graphql.json`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": accessToken,
+        },
+        body: JSON.stringify({
+          query: metafieldSearchQuery,
+          variables: { query: `metafield:product_export.original_product_id:"${productId}"` },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if ((data?.data?.products?.edges?.length ?? 0) > 0) return true;
+      }
+    } catch {
+      // fall through to title search
+    }
+
+    // Step 2: title search + verify metafield on each result
+    try {
+      const searchRes = await fetch(
+        `https://${shop}/admin/api/2023-10/products.json?title=${encodeURIComponent(productTitle)}&limit=50`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "X-Shopify-Access-Token": accessToken,
+          },
+        },
+      );
+      if (!searchRes.ok) return false;
+
+      const searchData = await searchRes.json();
+      for (const p of searchData.products ?? []) {
+        try {
+          const mfRes = await fetch(
+            `https://${shop}/admin/api/2023-10/products/${p.id}/metafields.json`,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                "X-Shopify-Access-Token": accessToken,
+              },
+            },
+          );
+          if (!mfRes.ok) continue;
+          const mfData = await mfRes.json();
+          const found = (mfData.metafields ?? []).some(
+            (mf: any) =>
+              mf.namespace === "product_export" &&
+              mf.key === "original_product_id" &&
+              mf.value === productId,
+          );
+          if (found) return true;
+        } catch {
+          continue;
+        }
+      }
+    } catch {
+      // couldn't determine — treat as not found
+    }
+
+    return false;
+  };
+
+  const checkStore = async (storeId: string): Promise<[string, string[]]> => {
+    try {
+      const tokenRes = await fetch(`${middlewareUrl}/token/${storeId}`, {
+        headers: { "X-API-Key": apiKey },
+      });
+      if (!tokenRes.ok) return [storeId, []];
+
+      const tokenData = await tokenRes.json();
+      const accessToken: string = tokenData.access_token;
+      const shop: string = tokenData.shop_domain;
+      if (!accessToken || !shop) return [storeId, []];
+
+      const results = await Promise.all(
+        sourceProducts.map(async ({ id, title }) =>
+          (await checkOneProduct(shop, accessToken, id, title)) ? id : null,
+        ),
+      );
+      return [storeId, results.filter(Boolean) as string[]];
+    } catch {
+      return [storeId, []];
+    }
+  };
+
+  const entries = await Promise.all(storeIds.map(checkStore));
+  return Object.fromEntries(entries);
+};
+
 export const fetchShopifyProducts = async (
   admin: any,
   variables: { first: number; after: string | null; query: string | null },

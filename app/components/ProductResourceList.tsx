@@ -27,19 +27,23 @@ interface ProductResourceListProps {
     channels?: number;
   }>;
   onProductClick: (product: any) => void;
+  onUpdateClick?: (product: any) => void;
   loading?: boolean;
   selectedProductIds: string[];
   onSelectionChange?: (selected: string[]) => void;
   onBulkExport?: (selected: string[]) => void;
+  onBulkUpdate?: (selected: string[]) => void;
 }
 
 export const ProductResourceList: React.FC<ProductResourceListProps> = ({
   products,
   onProductClick,
+  onUpdateClick,
   loading,
   selectedProductIds,
   onSelectionChange,
   onBulkExport,
+  onBulkUpdate,
 }) => {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -199,6 +203,23 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
             >
               Export selected{selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ""}
             </Button>
+            <Button
+              disabled={selectedProductIds.length === 0}
+              onClick={() => {
+                if (selectedProductIds.length === 1) {
+                  const selectedProduct = products.find(
+                    (p) => p.id === selectedProductIds[0],
+                  );
+                  if (selectedProduct && onUpdateClick) {
+                    onUpdateClick(selectedProduct);
+                  }
+                } else if (onBulkUpdate) {
+                  onBulkUpdate(selectedProductIds);
+                }
+              }}
+            >
+              Update selected{selectedProductIds.length > 0 ? ` (${selectedProductIds.length})` : ""}
+            </Button>
           </InlineStack>
         </div>
       </Box>
@@ -259,7 +280,10 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
               <Text as="span">{product.channels ?? 1}</Text>
             </IndexTable.Cell>
             <IndexTable.Cell>
-              <Button onClick={() => onProductClick(product)}>Export</Button>
+              <InlineStack gap="200">
+                <Button onClick={() => onProductClick(product)}>Export</Button>
+                <Button onClick={() => onUpdateClick?.(product)}>Update</Button>
+              </InlineStack>
             </IndexTable.Cell>
           </IndexTable.Row>
         ))}

@@ -145,6 +145,8 @@ export default function ProductList() {
   // Modal state
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
   const [bulkExportOpen, setBulkExportOpen] = useState(false);
+  const [selectedUpdateProduct, setSelectedUpdateProduct] = useState<any | null>(null);
+  const [bulkUpdateOpen, setBulkUpdateOpen] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   // Add state for selected stores (multi-select)
@@ -516,6 +518,194 @@ export default function ProductList() {
     }
   };
 
+  // Update product handler — same API as export, different success messages
+  const onUpdateProduct = async (
+    product: any,
+    toStores: string[],
+    status: "draft" | "active",
+    onProgress?: (progress: ExportProgress) => void,
+  ) => {
+    if (toStores.length === 0) {
+      throw new Error("Please select at least one store");
+    }
+
+    const results = [];
+    const errors = [];
+    let completed = 0;
+    let failed = 0;
+    const total = toStores.length;
+    const reportProgress = () => {
+      onProgress?.({ completed, total, failed });
+    };
+
+    reportProgress();
+
+    for (const toStore of toStores) {
+      try {
+        const res = await fetch("/app/api/export-product", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ product, toStore, status }),
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          errors.push({ storeId: toStore, error: errorText });
+          completed += 1;
+          failed += 1;
+        } else {
+          const result = await res.json();
+          results.push({ storeId: toStore, result });
+          completed += 1;
+        }
+      } catch (err: any) {
+        errors.push({ storeId: toStore, error: err.message || "Failed to update product" });
+        completed += 1;
+        failed += 1;
+      }
+
+      reportProgress();
+    }
+
+    const successCount = results.length;
+    const failCount = errors.length;
+    const totalCount = toStores.length;
+    const channelSyncDetails = results
+      .map((item: any) =>
+        formatStoreChannelSyncForToast(item.storeId, item.result?.channelSync),
+      )
+      .filter(Boolean);
+    const channelSyncMessage =
+      channelSyncDetails.length > 0
+        ? ` | Channels: ${channelSyncDetails.join("; ")}`
+        : "";
+
+    if (failCount === 0) {
+      return {
+        success: true,
+        message: `Product updated successfully in ${successCount} store${successCount !== 1 ? "s" : ""}${channelSyncMessage}`,
+        results,
+        errors: [],
+      };
+    } else if (successCount === 0) {
+      throw new Error(
+        `Failed to update product in all ${totalCount} store${totalCount !== 1 ? "s" : ""}`,
+      );
+    } else {
+      return {
+        success: true,
+        message: `Product updated in ${successCount} of ${totalCount} store${totalCount !== 1 ? "s" : ""}${channelSyncMessage}`,
+        results,
+        errors,
+      };
+    }
+  };
+
+  // Bulk update handler — same API as bulk export, different success messages
+  const onBulkUpdate = async (
+    productIds: string[],
+    toStores: string[],
+    status: "draft" | "active",
+    onProgress?: (progress: ExportProgress) => void,
+  ) => {
+    if (toStores.length === 0) {
+      throw new Error("Please select at least one store");
+    }
+    if (productIds.length === 0) {
+      throw new Error("Please select at least one product");
+    }
+
+    const productsToUpdate = products?.edges
+      ?.filter((edge) => productIds.includes(edge.node.id))
+      .map((edge) => edge.node) || [];
+
+    if (productsToUpdate.length === 0) {
+      throw new Error("No products found to update");
+    }
+
+    const results = [];
+    const errors = [];
+    let failedExports = 0;
+    const totalExports = productsToUpdate.length * toStores.length;
+    let completedExports = 0;
+    const reportProgress = () => {
+      onProgress?.({ completed: completedExports, total: totalExports, failed: failedExports });
+    };
+
+    reportProgress();
+
+    for (const toStore of toStores) {
+      try {
+        const res = await fetch("/app/api/export-products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ products: productsToUpdate, toStore, status }),
+        });
+
+        if (!res.ok) {
+          const errorText = await res.text();
+          errors.push({ storeId: toStore, error: errorText });
+          failedExports += productsToUpdate.length;
+          completedExports += productsToUpdate.length;
+          reportProgress();
+          continue;
+        }
+
+        const result = await res.json();
+        const storeSuccessful = result?.summary?.successful ?? result?.results?.length ?? 0;
+        const storeFailed = result?.summary?.failed ?? result?.errors?.length ?? 0;
+        const storeTotal = storeSuccessful + storeFailed || productsToUpdate.length;
+
+        failedExports += storeFailed;
+        completedExports += storeTotal;
+        results.push({ storeId: toStore, result });
+
+        if (Array.isArray(result?.errors) && result.errors.length > 0) {
+          errors.push(...result.errors.map((error: any) => ({ storeId: toStore, ...error })));
+        }
+        reportProgress();
+      } catch (err: any) {
+        errors.push({ storeId: toStore, error: err.message || "Failed to update products" });
+        failedExports += productsToUpdate.length;
+        completedExports += productsToUpdate.length;
+        reportProgress();
+      }
+    }
+
+    const successfulExports = completedExports - failedExports;
+    const bulkChannelDetails = results
+      .map((item: any) =>
+        formatBulkChannelSyncForToast(item.storeId, item.result?.channelSync),
+      )
+      .filter(Boolean);
+    const bulkChannelMessage =
+      bulkChannelDetails.length > 0
+        ? ` | Channels: ${bulkChannelDetails.join("; ")}`
+        : "";
+
+    if (failedExports === 0) {
+      return {
+        success: true,
+        message: `Successfully updated ${productsToUpdate.length} product${productsToUpdate.length !== 1 ? "s" : ""} in ${toStores.length} store${toStores.length !== 1 ? "s" : ""}${bulkChannelMessage}`,
+        results,
+        errors: [],
+        summary: { totalProducts: productsToUpdate.length, totalStores: toStores.length, totalExports, successful: successfulExports, failed: failedExports },
+      };
+    } else if (successfulExports === 0) {
+      throw new Error(
+        `Failed to update all products. ${failedExports} update${failedExports !== 1 ? "s" : ""} failed.`,
+      );
+    } else {
+      return {
+        success: true,
+        message: `Updated ${productsToUpdate.length} product${productsToUpdate.length !== 1 ? "s" : ""} in ${toStores.length} store${toStores.length !== 1 ? "s" : ""} (${successfulExports} successful, ${failedExports} failed)${bulkChannelMessage}`,
+        results,
+        errors,
+        summary: { totalProducts: productsToUpdate.length, totalStores: toStores.length, totalExports, successful: successfulExports, failed: failedExports },
+      };
+    }
+  };
+
   return (
     <Page>
       <TitleBar title="Products" />
@@ -563,12 +753,49 @@ export default function ProductList() {
           setBulkExportOpen(false);
           setSelectedProductIds([]);
         }}
-        selectedProducts={selectedProductIds}
+        selectedProducts={
+          products?.edges
+            ?.filter((e) => selectedProductIds.includes(e.node.id))
+            .map((e) => ({ id: e.node.id, title: e.node.title })) ?? []
+        }
         stores={stores}
         selectedStores={selectedStores}
         setSelectedStores={setSelectedStores}
         currentStoreName={currentStoreName}
         onBulkExport={onBulkExport}
+      />
+
+      {/* Update Product Modal */}
+      <ProductExportModal
+        open={!!selectedUpdateProduct}
+        onClose={() => setSelectedUpdateProduct(null)}
+        product={selectedUpdateProduct}
+        stores={stores}
+        selectedStores={selectedStores}
+        setSelectedStores={setSelectedStores}
+        currentStoreName={currentStoreName}
+        mode="update"
+        onExportProduct={onUpdateProduct}
+      />
+
+      {/* Bulk Update Modal */}
+      <BulkExportModal
+        open={bulkUpdateOpen}
+        onClose={() => {
+          setBulkUpdateOpen(false);
+          setSelectedProductIds([]);
+        }}
+        selectedProducts={
+          products?.edges
+            ?.filter((e) => selectedProductIds.includes(e.node.id))
+            .map((e) => ({ id: e.node.id, title: e.node.title })) ?? []
+        }
+        stores={stores}
+        selectedStores={selectedStores}
+        setSelectedStores={setSelectedStores}
+        currentStoreName={currentStoreName}
+        mode="update"
+        onBulkExport={onBulkUpdate}
       />
       <BlockStack gap="500">
         <Layout>
@@ -589,11 +816,16 @@ export default function ProductList() {
                   <ProductResourceList
                     products={resourceListProducts}
                     onProductClick={(clickedProduct) => {
-                      // Find the full product data from the original products
                       const product = products?.edges?.find(
                         (p) => p.node.id === clickedProduct.id,
                       )?.node;
                       setSelectedProduct(product);
+                    }}
+                    onUpdateClick={(clickedProduct) => {
+                      const product = products?.edges?.find(
+                        (p) => p.node.id === clickedProduct.id,
+                      )?.node;
+                      setSelectedUpdateProduct(product);
                     }}
                     selectedProductIds={selectedProductIds}
                     onSelectionChange={(selectedIds) => {
@@ -602,6 +834,10 @@ export default function ProductList() {
                     onBulkExport={(selectedIds) => {
                       setSelectedProductIds(selectedIds);
                       setBulkExportOpen(true);
+                    }}
+                    onBulkUpdate={(selectedIds) => {
+                      setSelectedProductIds(selectedIds);
+                      setBulkUpdateOpen(true);
                     }}
                   />
                 ) : (

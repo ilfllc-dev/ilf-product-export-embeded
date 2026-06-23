@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {
   Modal,
-  ChoiceList,
+  Checkbox,
+  Tooltip,
+  Spinner,
   Text,
   InlineStack,
   Badge,
@@ -19,11 +21,12 @@ interface Store {
 interface BulkExportModalProps {
   open: boolean;
   onClose: () => void;
-  selectedProducts: string[];
+  selectedProducts: { id: string; title: string }[];
   stores: Store[];
   selectedStores: string[];
   setSelectedStores: (ids: string[]) => void;
   currentStoreName: string;
+  mode?: "export" | "update";
   onBulkExport: (
     productIds: string[],
     toStores: string[],
@@ -44,75 +47,123 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
   selectedStores,
   setSelectedStores,
   currentStoreName,
+  mode = "export",
   onBulkExport,
 }) => {
+  const isUpdate = mode === "update";
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<{
     completed: number;
     total: number;
     failed: number;
   } | null>(null);
-  const [productStatus, setProductStatus] = useState<"draft" | "active">(
-    "draft",
-  );
+  const [productStatus, setProductStatus] = useState<"draft" | "active">("draft");
+
+  // Update mode: per-store count of how many selected products already exist
+  // "failed" = check couldn't run — treat all stores as open
+  const [checkStatus, setCheckStatus] = useState<"idle" | "loading" | "done" | "failed">("idle");
+  // { [storeId]: number of selectedProducts that exist in that store }
+  const [storeExistCounts, setStoreExistCounts] = useState<Record<string, number>>({});
+
+  // Run existence check whenever the Update modal opens or selection changes
+  useEffect(() => {
+    if (!open || !isUpdate || selectedProducts.length === 0) return;
+
+    let cancelled = false;
+    setCheckStatus("loading");
+    setStoreExistCounts({});
+
+    (async () => {
+      try {
+        const res = await fetch("/app/api/check-export-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            products: selectedProducts,
+            storeIds: stores.map((s) => s.id),
+          }),
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const counts: Record<string, number> = {};
+          for (const store of stores) {
+            counts[store.id] = (data.results[store.id] as string[] | undefined)?.length ?? 0;
+          }
+          setStoreExistCounts(counts);
+          // Auto-deselect only stores where 0 products exist
+          setSelectedStores(stores.map(s => s.id).filter((id) => (counts[id] ?? 0) > 0));
+          setCheckStatus("done");
+        } else {
+          // API error — fail open
+          if (!cancelled) setCheckStatus("failed");
+        }
+      } catch {
+        // Network error — fail open
+        if (!cancelled) setCheckStatus("failed");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isUpdate, selectedProducts.map(p => p.id).join(",")]);
 
   useEffect(() => {
     if (!open) {
       setIsExporting(false);
       setExportProgress(null);
+      setCheckStatus("idle");
+      setStoreExistCounts({});
     }
   }, [open]);
 
   const selectedStoreObjects = stores.filter((store) =>
     selectedStores.includes(store.id),
   );
-  const storeChoices = stores.map((store) => ({
-    label: store.name || store.shop,
-    value: store.id,
-  }));
+
+  const handleStoreToggle = (storeId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedStores([...selectedStores, storeId]);
+    } else {
+      setSelectedStores(selectedStores.filter((id) => id !== storeId));
+    }
+  };
 
   const handleExport = async () => {
-    if (selectedStores.length === 0 || selectedProducts.length === 0) {
-      return;
-    }
+    if (selectedStores.length === 0 || selectedProducts.length === 0) return;
 
+    const productIds = selectedProducts.map((p) => p.id);
     setExportProgress({
       completed: 0,
-      total: selectedProducts.length * selectedStores.length,
+      total: productIds.length * selectedStores.length,
       failed: 0,
     });
     setIsExporting(true);
     try {
       const result = await onBulkExport(
-        selectedProducts,
+        productIds,
         selectedStores,
         productStatus,
         (progress) => setExportProgress(progress),
       );
       setIsExporting(false);
-
-      if (
-        typeof shopify !== "undefined" &&
-        shopify.toast &&
-        shopify.toast.show
-      ) {
-        const message =
-          result?.message ||
-          `Exported ${selectedProducts.length} product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`;
-        shopify.toast.show(message, { duration: 5000 });
+      if (typeof shopify !== "undefined" && shopify.toast?.show) {
+        const fallback = isUpdate
+          ? `Updated ${selectedProducts.length} product${selectedProducts.length !== 1 ? "s" : ""} in ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`
+          : `Exported ${selectedProducts.length} product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`;
+        shopify.toast.show(result?.message || fallback, { duration: 5000 });
       }
       onClose();
     } catch (e: any) {
       setIsExporting(false);
-      if (
-        typeof shopify !== "undefined" &&
-        shopify.toast &&
-        shopify.toast.show
-      ) {
-        shopify.toast.show(
-          e.message || "Failed to export products",
-          { duration: 5000 },
-        );
+      if (typeof shopify !== "undefined" && shopify.toast?.show) {
+        shopify.toast.show(e.message || (isUpdate ? "Failed to update products" : "Failed to export products"), {
+          duration: 5000,
+          isError: true,
+        });
       }
     }
   };
@@ -122,15 +173,93 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
       ? Math.round((exportProgress.completed / exportProgress.total) * 100)
       : 0;
 
+  const total = selectedProducts.length;
+  const checkFailed = checkStatus === "failed";
+
+  const storeList = isUpdate ? (
+    <BlockStack gap="200">
+      <InlineStack gap="200" blockAlign="center">
+        <Text as="p" variant="bodyMd" fontWeight="semibold">
+          Select target stores
+        </Text>
+        {checkStatus === "loading" && <Spinner size="small" />}
+      </InlineStack>
+      {stores.map((store) => {
+        const existing = storeExistCounts[store.id] ?? 0;
+        const missing = total - existing;
+        // Only block a store if the check succeeded AND confirmed 0 products exist there
+        const noneExist = !checkFailed && checkStatus === "done" && existing === 0;
+        const someExist = !checkFailed && checkStatus === "done" && existing > 0 && existing < total;
+        const allExist = !checkFailed && checkStatus === "done" && existing === total;
+
+        let badge: React.ReactNode = null;
+        if (allExist) {
+          badge = <Badge tone="success">{`${existing}/${total}`}</Badge>;
+        } else if (someExist) {
+          badge = (
+            <Badge tone="warning">{`${existing}/${total} — ${missing} will be created`}</Badge>
+          );
+        } else if (noneExist) {
+          badge = <Badge tone="critical">{`0/${total}`}</Badge>;
+        }
+
+        const checkbox = (
+          <Checkbox
+            key={store.id}
+            id={store.id}
+            label={
+              <InlineStack gap="200" blockAlign="center">
+                <span>{store.name || store.shop}</span>
+                {badge}
+              </InlineStack>
+            }
+            checked={selectedStores.includes(store.id)}
+            disabled={noneExist || checkStatus === "loading"}
+            onChange={(checked) => handleStoreToggle(store.id, checked)}
+          />
+        );
+
+        if (noneExist) {
+          return (
+            <Tooltip
+              key={store.id}
+              content="No selected products exist in this store — use Export first"
+              activatorWrapper="div"
+            >
+              <div style={{ cursor: "not-allowed", opacity: 0.5 }}>{checkbox}</div>
+            </Tooltip>
+          );
+        }
+        return <div key={store.id}>{checkbox}</div>;
+      })}
+    </BlockStack>
+  ) : (
+    <BlockStack gap="200">
+      <Text as="p" variant="bodyMd" fontWeight="semibold">
+        Select target stores
+      </Text>
+      {stores.map((store) => (
+        <div key={store.id}>
+          <Checkbox
+            id={store.id}
+            label={store.name || store.shop}
+            checked={selectedStores.includes(store.id)}
+            onChange={(checked) => handleStoreToggle(store.id, checked)}
+          />
+        </div>
+      ))}
+    </BlockStack>
+  );
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Bulk Export Products"
+      title={isUpdate ? "Bulk Update Products" : "Bulk Export Products"}
       primaryAction={{
         content: isExporting
-          ? `Exporting ${selectedProducts.length} product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}...`
-          : `Export ${selectedProducts.length} Product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} Store${selectedStores.length !== 1 ? "s" : ""}`,
+          ? `${isUpdate ? "Updating" : "Exporting"} ${selectedProducts.length} product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}...`
+          : `${isUpdate ? "Update" : "Export"} ${selectedProducts.length} Product${selectedProducts.length !== 1 ? "s" : ""} to ${selectedStores.length} Store${selectedStores.length !== 1 ? "s" : ""}`,
         onAction: handleExport,
         loading: isExporting,
         disabled: isExporting || selectedStores.length === 0,
@@ -157,7 +286,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
           >
             <div style={{ flex: 1 }}>
               <Text as="p" variant="bodyMd" fontWeight="semibold">
-                Exporting {selectedProducts.length} product
+                {isUpdate ? "Updating" : "Exporting"} {selectedProducts.length} product
                 {selectedProducts.length !== 1 ? "s" : ""}
               </Text>
               <Text as="p" variant="bodySm" tone="subdued">
@@ -167,13 +296,7 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
           </div>
 
           <div>
-            <ChoiceList
-              title="Select target stores"
-              choices={storeChoices}
-              selected={selectedStores}
-              onChange={setSelectedStores}
-              allowMultiple
-            />
+            {storeList}
             {selectedStores.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <InlineStack gap="200" wrap>
@@ -195,19 +318,18 @@ export const BulkExportModal: React.FC<BulkExportModalProps> = ({
                 { label: "Active", value: "active" },
               ]}
               value={productStatus}
-              onChange={(value) =>
-                setProductStatus(value as "draft" | "active")
-              }
+              onChange={(value) => setProductStatus(value as "draft" | "active")}
             />
           </div>
         </BlockStack>
       </Modal.Section>
+
       {isExporting && exportProgress && (
         <Modal.Section>
           <BlockStack gap="200">
             <Text as="p" variant="bodyMd" fontWeight="semibold">
-              Exported {exportProgress.completed} of {exportProgress.total}{" "}
-              item{exportProgress.total !== 1 ? "s" : ""}
+              {isUpdate ? "Updated" : "Exported"} {exportProgress.completed} of{" "}
+              {exportProgress.total} item{exportProgress.total !== 1 ? "s" : ""}
             </Text>
             <ProgressBar progress={progressPercent} size="small" />
             {exportProgress.failed > 0 && (

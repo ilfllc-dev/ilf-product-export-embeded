@@ -1,24 +1,22 @@
 # Product Export App
 
-# Associated partner account is jonathanator14@gmail.com for this apps deployment
-
 ## Deployment
 
-Deployed on Render.io using Docker. Each deployment uses a separate branch and Shopify app.
+Deployed on DigitalOcean App Platform using Docker. Each deployment uses a separate branch and Shopify app.
 
 ### Multiple Deployments
 
 To deploy for a different organization:
 1. Create a new branch (e.g., `org2`)
 2. Update `shopify.app.toml` and `shopify.app.production.toml` with new app credentials
-3. Create a new Render service pointing to the new branch
+3. Create a new DigitalOcean App pointing to the new branch
 4. Use the same Redis instance with a different database number (e.g., `/0` → `/1`)
 
 ### Required Environment Variables
 
 - `SHOPIFY_API_KEY` - Shopify app API key
 - `SHOPIFY_API_SECRET` - Shopify app secret
-- `SHOPIFY_APP_URL` - Full Render service URL (e.g., `https://app-name.onrender.com`)
+- `SHOPIFY_APP_URL` - Full DigitalOcean app URL (e.g., `https://your-app.ondigitalocean.app`)
 - `REDIS_URL` - Redis connection string with database number (e.g., `redis://host:port/0`)
 - `SESSION_SECRET` - Random string for session encryption (generate unique per deployment)
 - `NODE_ENV` - Set to `production`
@@ -40,5 +38,3 @@ npm run dev
 ```
 
 ---
-
-

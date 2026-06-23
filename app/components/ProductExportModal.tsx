@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import {
   Modal,
   Select,
-  ChoiceList,
+  Checkbox,
+  Tooltip,
+  Spinner,
   Text,
   InlineStack,
   Badge,
@@ -24,6 +26,7 @@ interface ProductExportModalProps {
   selectedStores: string[];
   setSelectedStores: (ids: string[]) => void;
   currentStoreName: string;
+  mode?: "export" | "update";
   onExportProduct: (
     product: any,
     toStores: string[],
@@ -44,40 +47,94 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
   selectedStores,
   setSelectedStores,
   currentStoreName,
+  mode = "export",
   onExportProduct,
 }) => {
+  const isUpdate = mode === "update";
+
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<{
     completed: number;
     total: number;
     failed: number;
   } | null>(null);
-  const [productStatus, setProductStatus] = useState<"draft" | "active">(
-    "draft",
-  );
+  const [productStatus, setProductStatus] = useState<"draft" | "active">("draft");
+
+  // Update mode: track which stores already have this product
+  // "unchecked" = check not run yet or failed — treat all stores as available (fail open)
+  const [checkStatus, setCheckStatus] = useState<"idle" | "loading" | "done" | "failed">("idle");
+  const [existsInStores, setExistsInStores] = useState<Set<string>>(new Set());
+
+  // Run existence check whenever the Update modal opens for a new product
+  useEffect(() => {
+    if (!open || !isUpdate || !product?.id) return;
+
+    let cancelled = false;
+    setCheckStatus("loading");
+    setExistsInStores(new Set());
+
+    const productTitle =
+      typeof product === "string" ? "" : (product.title || "");
+
+    (async () => {
+      try {
+        const res = await fetch("/app/api/check-export-status", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            products: [{ id: product.id, title: productTitle }],
+            storeIds: stores.map((s) => s.id),
+          }),
+        });
+        if (cancelled) return;
+        if (res.ok) {
+          const data = await res.json();
+          const found = new Set<string>(
+            Object.entries(data.results as Record<string, string[]>)
+              .filter(([, ids]) => ids.length > 0)
+              .map(([storeId]) => storeId),
+          );
+          setExistsInStores(found);
+          // Auto-deselect stores where the product doesn't exist
+          setSelectedStores(stores.map(s => s.id).filter((id) => found.has(id)));
+          setCheckStatus("done");
+        } else {
+          // API error — fail open (all stores remain selectable)
+          if (!cancelled) setCheckStatus("failed");
+        }
+      } catch {
+        // Network error — fail open
+        if (!cancelled) setCheckStatus("failed");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, isUpdate, product?.id]);
 
   useEffect(() => {
     if (!open) {
       setIsExporting(false);
       setExportProgress(null);
+      setCheckStatus("idle");
+      setExistsInStores(new Set());
     }
   }, [open]);
+
+  // When check fails we treat every store as available
+  const checkFailed = checkStatus === "failed";
 
   if (!product) return null;
 
   const selectedStoreObjects = stores.filter((store) =>
     selectedStores.includes(store.id),
   );
-  const storeChoices = stores.map((store) => ({
-    label: store.name || store.shop,
-    value: store.id,
-  }));
   const imageUrl = product.images?.edges?.[0]?.node?.url;
 
-  // Handle case where product might be just an ID string
   const productTitle = (() => {
     if (typeof product === "string") {
-      // If it's just a string (product ID), try to extract a readable name
       if (product.includes("gid://shopify/Product/")) {
         return `Product ${product.split("/").pop()}`;
       }
@@ -95,25 +152,84 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
       ? Math.round((exportProgress.completed / exportProgress.total) * 100)
       : 0;
 
+  const handleStoreToggle = (storeId: string, checked: boolean) => {
+    if (checked) {
+      setSelectedStores([...selectedStores, storeId]);
+    } else {
+      setSelectedStores(selectedStores.filter((id) => id !== storeId));
+    }
+  };
+
+  const storeList = isUpdate ? (
+    <BlockStack gap="200">
+      <InlineStack gap="200" blockAlign="center">
+        <Text as="p" variant="bodyMd" fontWeight="semibold">
+          Select target stores
+        </Text>
+        {checkStatus === "loading" && <Spinner size="small" />}
+      </InlineStack>
+      {stores.map((store) => {
+        // During loading or on check failure: treat all stores as available
+        const exists =
+          checkFailed ||
+          checkStatus === "loading" ||
+          checkStatus === "idle" ||
+          existsInStores.has(store.id);
+        const checkbox = (
+          <Checkbox
+            key={store.id}
+            id={store.id}
+            label={store.name || store.shop}
+            checked={selectedStores.includes(store.id)}
+            disabled={!exists}
+            onChange={(checked) => handleStoreToggle(store.id, checked)}
+          />
+        );
+        if (!exists) {
+          return (
+            <Tooltip
+              key={store.id}
+              content="Not yet exported to this store — use Export instead"
+              activatorWrapper="div"
+            >
+              <div style={{ cursor: "not-allowed", opacity: 0.5 }}>{checkbox}</div>
+            </Tooltip>
+          );
+        }
+        return <div key={store.id}>{checkbox}</div>;
+      })}
+    </BlockStack>
+  ) : (
+    <BlockStack gap="200">
+      <Text as="p" variant="bodyMd" fontWeight="semibold">
+        Select target stores
+      </Text>
+      {stores.map((store) => (
+        <div key={store.id}>
+          <Checkbox
+            id={store.id}
+            label={store.name || store.shop}
+            checked={selectedStores.includes(store.id)}
+            onChange={(checked) => handleStoreToggle(store.id, checked)}
+          />
+        </div>
+      ))}
+    </BlockStack>
+  );
+
   return (
     <>
       <Modal
         open={open}
         onClose={onClose}
-        title="Export Product"
+        title={isUpdate ? "Update Product" : "Export Product"}
         primaryAction={{
           content: isExporting
-            ? `Exporting to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}...`
-            : `Export to ${selectedStores.length} Store${selectedStores.length !== 1 ? "s" : ""}`,
+            ? `${isUpdate ? "Updating" : "Exporting"} to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}...`
+            : `${isUpdate ? "Update" : "Export"} to ${selectedStores.length} Store${selectedStores.length !== 1 ? "s" : ""}`,
           onAction: async () => {
-            if (selectedStores.length === 0) {
-              return;
-            }
-            setExportProgress({
-              completed: 0,
-              total: selectedStores.length,
-              failed: 0,
-            });
+            if (selectedStores.length === 0) return;
+            setExportProgress({ completed: 0, total: selectedStores.length, failed: 0 });
             setIsExporting(true);
             try {
               const result = await onExportProduct(
@@ -123,21 +239,20 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 (progress) => setExportProgress(progress),
               );
               setIsExporting(false);
-              if (
-                typeof shopify !== "undefined" &&
-                shopify.toast &&
-                shopify.toast.show
-              ) {
-                const message =
-                  result?.message ||
-                  `Product exported to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`;
-                shopify.toast.show(message, { duration: 5000 });
+              if (typeof shopify !== "undefined" && shopify.toast?.show) {
+                const fallback = isUpdate
+                  ? `Product updated in ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`
+                  : `Product exported to ${selectedStores.length} store${selectedStores.length !== 1 ? "s" : ""}`;
+                shopify.toast.show(result?.message || fallback, { duration: 5000 });
               }
               onClose();
             } catch (e: any) {
               setIsExporting(false);
               if (typeof shopify !== "undefined" && shopify.toast?.show) {
-                shopify.toast.show(e?.message || "Export failed", { duration: 5000, isError: true });
+                shopify.toast.show(
+                  e?.message || (isUpdate ? "Update failed" : "Export failed"),
+                  { duration: 5000, isError: true },
+                );
               }
             }
           },
@@ -152,7 +267,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
           },
         ]}
       >
-        {/* Product Card Section */}
+        {/* Product Card */}
         <Modal.Section>
           <div
             style={{
@@ -206,8 +321,9 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
             </div>
           </div>
         </Modal.Section>
+
+        {/* FROM → TO */}
         <Modal.Section>
-          {/* FROM -> TO row with arrow */}
           <div
             style={{
               display: "flex",
@@ -218,14 +334,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
               gap: 48,
             }}
           >
-            {/* FROM (left) */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
               <span style={{ fontWeight: 600, marginBottom: 8 }}>FROM</span>
               <div
                 style={{
@@ -247,28 +356,10 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 {currentStoreName}
               </div>
             </div>
-            {/* Arrow - horizontally centered with colored boxes */}
-            <div
-              style={{
-                marginTop: "2rem",
-                display: "flex",
-                alignItems: "center",
-                height: 48,
-              }}
-            >
-              <span style={{ fontSize: 32, color: "#bbb", lineHeight: 1 }}>
-                &rarr;
-              </span>
+            <div style={{ marginTop: "2rem", display: "flex", alignItems: "center", height: 48 }}>
+              <span style={{ fontSize: 32, color: "#bbb", lineHeight: 1 }}>&rarr;</span>
             </div>
-            {/* TO (right) */}
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
               <span style={{ fontWeight: 600, marginBottom: 8 }}>TO</span>
               {selectedStores.length === 0 ? (
                 <div
@@ -276,7 +367,6 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                     background: "#f6f6f7",
                     padding: "8px 24px",
                     borderRadius: 8,
-                    fontWeight: 400,
                     minWidth: 180,
                     maxWidth: 240,
                     width: 240,
@@ -309,8 +399,7 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                     justifyContent: "center",
                   }}
                 >
-                  {selectedStoreObjects[0]?.name ||
-                    selectedStoreObjects[0]?.shop}
+                  {selectedStoreObjects[0]?.name || selectedStoreObjects[0]?.shop}
                 </div>
               ) : (
                 <div
@@ -336,15 +425,11 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
             </div>
           </div>
         </Modal.Section>
+
+        {/* Store selector + status */}
         <Modal.Section>
           <div style={{ marginBottom: "1rem", width: "100%" }}>
-            <ChoiceList
-              title="Select target stores"
-              choices={storeChoices}
-              selected={selectedStores}
-              onChange={setSelectedStores}
-              allowMultiple
-            />
+            {storeList}
             {selectedStores.length > 0 && (
               <div style={{ marginTop: 12 }}>
                 <InlineStack gap="200" wrap>
@@ -365,18 +450,17 @@ export const ProductExportModal: React.FC<ProductExportModalProps> = ({
                 { label: "Active", value: "active" },
               ]}
               value={productStatus}
-              onChange={(value) =>
-                setProductStatus(value as "draft" | "active")
-              }
+              onChange={(value) => setProductStatus(value as "draft" | "active")}
             />
           </div>
         </Modal.Section>
+
         {isExporting && exportProgress && (
           <Modal.Section>
             <BlockStack gap="200">
               <Text as="p" variant="bodyMd" fontWeight="semibold">
-                Exported {exportProgress.completed} of {exportProgress.total}{" "}
-                item{exportProgress.total !== 1 ? "s" : ""}
+                {isUpdate ? "Updated" : "Exported"} {exportProgress.completed} of{" "}
+                {exportProgress.total} item{exportProgress.total !== 1 ? "s" : ""}
               </Text>
               <ProgressBar progress={progressPercent} size="small" />
               {exportProgress.failed > 0 && (
