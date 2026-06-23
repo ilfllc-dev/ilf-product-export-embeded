@@ -140,7 +140,6 @@ export default function ProductList() {
   } = useLoaderData<typeof loader>();
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState(initialSearch);
 
   // Modal state
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null);
@@ -154,22 +153,17 @@ export default function ProductList() {
     stores.length > 0 ? [stores[0].id] : [],
   );
 
-  // Handle search input change
-  const handleSearchChange = useCallback((value: string) => {
-    setSearch(value);
-  }, []);
-
-  // Handle search submission
-  const handleSearch = useCallback(() => {
+  // Server-side search — triggered by the search box in ProductResourceList (debounced)
+  const handleServerSearch = useCallback((value: string) => {
     const newSearchParams = new URLSearchParams(searchParams);
-    if (search.trim()) {
-      newSearchParams.set("search", search.trim());
+    if (value.trim()) {
+      newSearchParams.set("search", value.trim());
     } else {
       newSearchParams.delete("search");
     }
-    newSearchParams.delete("cursor"); // Reset pagination when searching
-    setSearchParams(newSearchParams);
-  }, [search, searchParams, setSearchParams]);
+    newSearchParams.delete("cursor");
+    setSearchParams(newSearchParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   // Handle pagination
   const handlePagination = useCallback(
@@ -815,6 +809,8 @@ export default function ProductList() {
                 {hasProducts ? (
                   <ProductResourceList
                     products={resourceListProducts}
+                    initialSearchValue={initialSearch}
+                    onSearchChange={handleServerSearch}
                     onProductClick={(clickedProduct) => {
                       const product = products?.edges?.find(
                         (p) => p.node.id === clickedProduct.id,

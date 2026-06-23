@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import {
   IndexTable,
   TextField,
@@ -33,6 +33,8 @@ interface ProductResourceListProps {
   onSelectionChange?: (selected: string[]) => void;
   onBulkExport?: (selected: string[]) => void;
   onBulkUpdate?: (selected: string[]) => void;
+  initialSearchValue?: string;
+  onSearchChange?: (value: string) => void;
 }
 
 export const ProductResourceList: React.FC<ProductResourceListProps> = ({
@@ -44,9 +46,12 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
   onSelectionChange,
   onBulkExport,
   onBulkUpdate,
+  initialSearchValue = "",
+  onSearchChange,
 }) => {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearchValue);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [filterPopoverActive, setFilterPopoverActive] = useState(false);
 
   const filteredProducts = useMemo(
@@ -134,13 +139,23 @@ export const ProductResourceList: React.FC<ProductResourceListProps> = ({
                 label="Search products"
                 labelHidden
                 value={search}
-                onChange={setSearch}
+                onChange={(value) => {
+                  setSearch(value);
+                  if (onSearchChange) {
+                    if (debounceRef.current) clearTimeout(debounceRef.current);
+                    debounceRef.current = setTimeout(() => onSearchChange(value), 400);
+                  }
+                }}
                 autoComplete="off"
                 placeholder="Search by title, vendor, or type..."
                 prefix={<Icon source={SearchIcon} tone="base" />}
                 disabled={loading}
                 clearButton
-                onClearButtonClick={() => setSearch("")}
+                onClearButtonClick={() => {
+                  setSearch("");
+                  if (debounceRef.current) clearTimeout(debounceRef.current);
+                  onSearchChange?.("");
+                }}
               />
             </div>
             <Popover
